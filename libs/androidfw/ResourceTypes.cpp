@@ -3738,7 +3738,7 @@ nope:
                                          i, ei, dtohl(entry->key.index)));
                 if (dtohl(entry->key.index) == (size_t)ei) {
                     if (outTypeSpecFlags) {
-                        *outTypeSpecFlags = typeConfigs->typeSpecFlags[i];
+                        *outTypeSpecFlags = dtohl(typeConfigs->typeSpecFlags[i]);
                         if (fakePublic) {
                             *outTypeSpecFlags |= ResTable_typeSpec::SPEC_PUBLIC;
                         }
