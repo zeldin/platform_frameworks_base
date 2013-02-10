@@ -109,7 +109,6 @@ public class DatabaseHelper extends SQLiteOpenHelper {
         super(context, dbNameForUser(userHandle), null, DATABASE_VERSION);
         mContext = context;
         mUserHandle = userHandle;
-        setWriteAheadLoggingEnabled(true);
     }
 
     public static boolean isValidTable(String name) {
@@ -2180,6 +2179,9 @@ public class DatabaseHelper extends SQLiteOpenHelper {
                     R.string.def_car_dock_sound);
             loadStringSetting(stmt, Settings.Global.CAR_UNDOCK_SOUND,
                     R.string.def_car_undock_sound);
+
+            loadIntegerSetting(stmt, Settings.Global.DOCK_AUDIO_MEDIA_ENABLED,
+                    R.integer.def_dock_audio_media_enabled);
 
             loadSetting(stmt, Settings.Global.SET_INSTALL_LOCATION, 0);
             loadSetting(stmt, Settings.Global.DEFAULT_INSTALL_LOCATION,
