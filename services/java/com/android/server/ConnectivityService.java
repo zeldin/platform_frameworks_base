@@ -2689,18 +2689,8 @@ public class ConnectivityService extends IConnectivityManager.Stub {
                             state + "/" + info.getDetailedState());
                     }
 
-                    // Connectivity state changed:
-                    // [31-14] Reserved for future use
-                    // [13-10] Network subtype (for mobile network, as defined
-                    //         by TelephonyManager)
-                    // [9-4] Detailed state ordinal (as defined by
-                    //         NetworkInfo.DetailedState)
-                    // [3-0] Network type (as defined by ConnectivityManager)
-                    int eventLogParam = (info.getType() & 0xf) |
-                            ((info.getDetailedState().ordinal() & 0x3f) << 4) |
-                            (info.getSubtype() << 10);
-                    EventLog.writeEvent(EventLogTags.CONNECTIVITY_STATE_CHANGED,
-                            eventLogParam);
+                    EventLogTags.writeConnectivityStateChanged(
+                            info.getType(), info.getSubtype(), info.getDetailedState().ordinal());
 
                     if (info.getDetailedState() ==
                             NetworkInfo.DetailedState.FAILED) {
@@ -3394,7 +3384,7 @@ public class ConnectivityService extends IConnectivityManager.Stub {
         // Tear down existing lockdown if profile was removed
         mLockdownEnabled = LockdownVpnTracker.isEnabled();
         if (mLockdownEnabled) {
-            if (mKeyStore.state() != KeyStore.State.UNLOCKED) {
+            if (!mKeyStore.isUnlocked()) {
                 Slog.w(TAG, "KeyStore locked; unable to create LockdownTracker");
                 return false;
             }

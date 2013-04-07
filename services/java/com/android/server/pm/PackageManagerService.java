@@ -352,6 +352,9 @@ public class PackageManagerService extends IPackageManager.Stub {
     final HashMap<String, FeatureInfo> mAvailableFeatures =
             new HashMap<String, FeatureInfo>();
 
+    // If mac_permissions.xml was found for seinfo labeling.
+    boolean mFoundPolicyFile;
+
     // All available activities, for your resolving pleasure.
     final ActivityIntentResolver mActivities =
             new ActivityIntentResolver();
@@ -1020,7 +1023,10 @@ public class PackageManagerService extends IPackageManager.Stub {
 
             readPermissions();
 
-            mRestoredSettings = mSettings.readLPw(sUserManager.getUsers(false));
+            mFoundPolicyFile = SELinuxMMAC.readInstallPolicy();
+
+            mRestoredSettings = mSettings.readLPw(sUserManager.getUsers(false),
+                    mSdkVersion, mOnlyCore);
             long startTime = SystemClock.uptimeMillis();
 
             EventLog.writeEvent(EventLogTags.BOOT_PROGRESS_PMS_SYSTEM_SCAN_START,
@@ -1318,6 +1324,10 @@ public class PackageManagerService extends IPackageManager.Stub {
 
     public boolean isFirstBoot() {
         return !mRestoredSettings;
+    }
+
+    public boolean isOnlyCoreApps() {
+        return mOnlyCore;
     }
 
     private String getRequiredVerifierLPr() {
@@ -3577,16 +3587,16 @@ public class PackageManagerService extends IPackageManager.Stub {
         }
     }
 
-    private int createDataDirsLI(String packageName, int uid) {
+    private int createDataDirsLI(String packageName, int uid, String seinfo) {
         int[] users = sUserManager.getUserIds();
-        int res = mInstaller.install(packageName, uid, uid);
+        int res = mInstaller.install(packageName, uid, uid, seinfo);
         if (res < 0) {
             return res;
         }
         for (int user : users) {
             if (user != 0) {
                 res = mInstaller.createUserData(packageName,
-                        UserHandle.getUid(user, uid), user);
+                        UserHandle.getUid(user, uid), user, seinfo);
                 if (res < 0) {
                     return res;
                 }
@@ -3842,6 +3852,10 @@ public class PackageManagerService extends IPackageManager.Stub {
                 pkg.applicationInfo.flags |= ApplicationInfo.FLAG_UPDATED_SYSTEM_APP;
             }
 
+            if (mFoundPolicyFile) {
+                SELinuxMMAC.assignSeinfoValue(pkg);
+            }
+
             pkg.applicationInfo.uid = pkgSetting.appId;
             pkg.mExtras = pkgSetting;
 
@@ -3980,7 +3994,8 @@ public class PackageManagerService extends IPackageManager.Stub {
                             recovered = true;
 
                             // And now re-install the app.
-                            ret = createDataDirsLI(pkgName, pkg.applicationInfo.uid);
+                            ret = createDataDirsLI(pkgName, pkg.applicationInfo.uid,
+                                                   pkg.applicationInfo.seinfo);
                             if (ret == -1) {
                                 // Ack should not happen!
                                 msg = prefix + pkg.packageName
@@ -4026,7 +4041,8 @@ public class PackageManagerService extends IPackageManager.Stub {
                         Log.v(TAG, "Want this data dir: " + dataPath);
                 }
                 //invoke installer to do the actual installation
-                int ret = createDataDirsLI(pkgName, pkg.applicationInfo.uid);
+                int ret = createDataDirsLI(pkgName, pkg.applicationInfo.uid,
+                                           pkg.applicationInfo.seinfo);
                 if (ret < 0) {
                     // Error from installer
                     mLastScanError = PackageManager.INSTALL_FAILED_INSUFFICIENT_STORAGE;
@@ -4113,7 +4129,7 @@ public class PackageManagerService extends IPackageManager.Stub {
                         }
                     }
 
-                    Slog.i(TAG, "Linking native library dir for " + path);
+                    if (DEBUG_INSTALL) Slog.i(TAG, "Linking native library dir for " + path);
                     final int[] userIds = sUserManager.getUserIds();
                     synchronized (mInstallLock) {
                         for (int userId : userIds) {
@@ -6301,20 +6317,21 @@ public class PackageManagerService extends IPackageManager.Stub {
 
                     final File packageFile;
                     if (encryptionParams != null || !"file".equals(mPackageURI.getScheme())) {
-                        ParcelFileDescriptor out = null;
-
                         mTempPackage = createTempPackageFile(mDrmAppPrivateInstallDir);
                         if (mTempPackage != null) {
+                            ParcelFileDescriptor out;
                             try {
                                 out = ParcelFileDescriptor.open(mTempPackage,
                                         ParcelFileDescriptor.MODE_READ_WRITE);
                             } catch (FileNotFoundException e) {
+                                out = null;
                                 Slog.e(TAG, "Failed to create temporary file for : " + mPackageURI);
                             }
 
                             // Make a temporary file for decryption.
                             ret = mContainerService
                                     .copyResource(mPackageURI, encryptionParams, out);
+                            IoUtils.closeQuietly(out);
 
                             packageFile = mTempPackage;
 
@@ -6346,6 +6363,18 @@ public class PackageManagerService extends IPackageManager.Stub {
                             if (mInstaller.freeCache(size + lowThreshold) >= 0) {
                                 pkgLite = mContainerService.getMinimalPackageInfo(packageFilePath,
                                         flags, lowThreshold);
+                            }
+                            /*
+                             * The cache free must have deleted the file we
+                             * downloaded to install.
+                             *
+                             * TODO: fix the "freeCache" call to not delete
+                             *       the file we care about.
+                             */
+                            if (pkgLite.recommendedInstallLocation
+                                    == PackageHelper.RECOMMEND_FAILED_INVALID_URI) {
+                                pkgLite.recommendedInstallLocation
+                                    = PackageHelper.RECOMMEND_FAILED_INSUFFICIENT_STORAGE;
                             }
                         }
                     }
@@ -9079,10 +9108,8 @@ public class PackageManagerService extends IPackageManager.Stub {
                 if (removed.size() > 0) {
                     for (int j=0; j<removed.size(); j++) {
                         PreferredActivity pa = removed.get(i);
-                        RuntimeException here = new RuntimeException("here");
-                        here.fillInStackTrace();
                         Slog.w(TAG, "Removing dangling preferred activity: "
-                                + pa.mPref.mComponent, here);
+                                + pa.mPref.mComponent);
                         pir.removeFilter(pa);
                     }
                     mSettings.writePackageRestrictionsLPr(

@@ -4421,12 +4421,14 @@ public final class ActivityThread {
             new ArrayList<IActivityManager.ContentProviderHolder>();
 
         for (ProviderInfo cpi : providers) {
-            StringBuilder buf = new StringBuilder(128);
-            buf.append("Pub ");
-            buf.append(cpi.authority);
-            buf.append(": ");
-            buf.append(cpi.name);
-            Log.i(TAG, buf.toString());
+            if (DEBUG_PROVIDER) {
+                StringBuilder buf = new StringBuilder(128);
+                buf.append("Pub ");
+                buf.append(cpi.authority);
+                buf.append(": ");
+                buf.append(cpi.name);
+                Log.i(TAG, buf.toString());
+            }
             IActivityManager.ContentProviderHolder cph = installProvider(context, null, cpi,
                     false /*noisy*/, true /*noReleaseNeeded*/, true /*stable*/);
             if (cph != null) {
@@ -4490,6 +4492,8 @@ public final class ActivityThread {
                                 + "snatched provider from the jaws of death");
                     }
                     prc.removePending = false;
+                    // There is a race! It fails to remove the message, which
+                    // will be handled in completeRemoveProvider().
                     mH.removeMessages(H.REMOVE_PROVIDER, prc);
                 } else {
                     unstableDelta = 0;
@@ -4668,6 +4672,11 @@ public final class ActivityThread {
                         + "provider still in use");
                 return;
             }
+
+            // More complicated race!! Some client managed to acquire the
+            // provider and release it before the removal was completed.
+            // Continue the removal, and abort the next remove message.
+            prc.removePending = false;
 
             final IBinder jBinder = prc.holder.provider.asBinder();
             ProviderRefCount existingPrc = mProviderRefCountMap.get(jBinder);

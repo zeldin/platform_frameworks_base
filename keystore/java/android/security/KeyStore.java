@@ -74,6 +74,10 @@ public class KeyStore {
         }
     }
 
+    public boolean isUnlocked() {
+        return state() == State.UNLOCKED;
+    }
+
     public byte[] get(String key) {
         try {
             return mBinder.get(key);
@@ -83,9 +87,22 @@ public class KeyStore {
         }
     }
 
-    public boolean put(String key, byte[] value) {
+    public boolean put(String key, byte[] value, int uid) {
         try {
-            return mBinder.insert(key, value) == NO_ERROR;
+            return mBinder.insert(key, value, uid) == NO_ERROR;
+        } catch (RemoteException e) {
+            Log.w(TAG, "Cannot connect to keystore", e);
+            return false;
+        }
+    }
+
+    public boolean put(String key, byte[] value) {
+        return put(key, value, -1);
+    }
+
+    public boolean delete(String key, int uid) {
+        try {
+            return mBinder.del(key, uid) == NO_ERROR;
         } catch (RemoteException e) {
             Log.w(TAG, "Cannot connect to keystore", e);
             return false;
@@ -93,8 +110,12 @@ public class KeyStore {
     }
 
     public boolean delete(String key) {
+        return delete(key, -1);
+    }
+
+    public boolean contains(String key, int uid) {
         try {
-            return mBinder.del(key) == NO_ERROR;
+            return mBinder.exist(key, uid) == NO_ERROR;
         } catch (RemoteException e) {
             Log.w(TAG, "Cannot connect to keystore", e);
             return false;
@@ -102,21 +123,20 @@ public class KeyStore {
     }
 
     public boolean contains(String key) {
-        try {
-            return mBinder.exist(key) == NO_ERROR;
-        } catch (RemoteException e) {
-            Log.w(TAG, "Cannot connect to keystore", e);
-            return false;
-        }
+        return contains(key, -1);
     }
 
-    public String[] saw(String prefix) {
+    public String[] saw(String prefix, int uid) {
         try {
-            return mBinder.saw(prefix);
+            return mBinder.saw(prefix, uid);
         } catch (RemoteException e) {
             Log.w(TAG, "Cannot connect to keystore", e);
             return null;
         }
+    }
+
+    public String[] saw(String prefix) {
+        return saw(prefix, -1);
     }
 
     public boolean reset() {
@@ -165,9 +185,22 @@ public class KeyStore {
         }
     }
 
-    public boolean generate(String key) {
+    public boolean generate(String key, int uid) {
         try {
-            return mBinder.generate(key) == NO_ERROR;
+            return mBinder.generate(key, uid) == NO_ERROR;
+        } catch (RemoteException e) {
+            Log.w(TAG, "Cannot connect to keystore", e);
+            return false;
+        }
+    }
+
+    public boolean generate(String key) {
+        return generate(key, -1);
+    }
+
+    public boolean importKey(String keyName, byte[] key, int uid) {
+        try {
+            return mBinder.import_key(keyName, key, uid) == NO_ERROR;
         } catch (RemoteException e) {
             Log.w(TAG, "Cannot connect to keystore", e);
             return false;
@@ -175,12 +208,7 @@ public class KeyStore {
     }
 
     public boolean importKey(String keyName, byte[] key) {
-        try {
-            return mBinder.import_key(keyName, key) == NO_ERROR;
-        } catch (RemoteException e) {
-            Log.w(TAG, "Cannot connect to keystore", e);
-            return false;
-        }
+        return importKey(keyName, key, -1);
     }
 
     public byte[] getPubkey(String key) {
@@ -192,13 +220,17 @@ public class KeyStore {
         }
     }
 
-    public boolean delKey(String key) {
+    public boolean delKey(String key, int uid) {
         try {
-            return mBinder.del_key(key) == NO_ERROR;
+            return mBinder.del_key(key, uid) == NO_ERROR;
         } catch (RemoteException e) {
             Log.w(TAG, "Cannot connect to keystore", e);
             return false;
         }
+    }
+
+    public boolean delKey(String key) {
+        return delKey(key, -1);
     }
 
     public byte[] sign(String key, byte[] data) {
@@ -252,6 +284,24 @@ public class KeyStore {
         } catch (RemoteException e) {
             Log.w(TAG, "Cannot connect to keystore", e);
             return -1L;
+        }
+    }
+
+    public boolean duplicate(String srcKey, int srcUid, String destKey, int destUid) {
+        try {
+            return mBinder.duplicate(srcKey, srcUid, destKey, destUid) == NO_ERROR;
+        } catch (RemoteException e) {
+            Log.w(TAG, "Cannot connect to keystore", e);
+            return false;
+        }
+    }
+
+    public boolean isHardwareBacked() {
+        try {
+            return mBinder.is_hardware_backed() == NO_ERROR;
+        } catch (RemoteException e) {
+            Log.w(TAG, "Cannot connect to keystore", e);
+            return false;
         }
     }
 

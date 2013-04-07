@@ -192,7 +192,9 @@
         </ul>
       </li>
     </ul>
-  </li><!-- end getting started -->    
+  </li><!-- end getting started -->
+  
+  
   
 
   <li class="nav-section">
@@ -417,7 +419,6 @@
           </li>
         </ul>
       </li>
-
       <li class="nav-section">
         <div class="nav-section-header">
           <a href="<?cs var:toroot ?>training/efficient-downloads/index.html"
@@ -601,6 +602,66 @@
           </li>
         </ul>
       </li>
+
+      <li class="nav-section">
+          <div class="nav-section-header">
+              <a href="<?cs var:toroot ?>training/notify-user/index.html"
+                 description=
+                 "How to display messages called notifications outside of
+                 your application's UI."
+               >Notifying the User</a>
+          </div>
+          <ul>
+              <li>
+                  <a href="<?cs var:toroot ?>training/notify-user/build-notification.html">
+                  Building a Notification
+                  </a>
+              </li>
+              <li>
+                  <a href="<?cs var:toroot ?>training/notify-user/navigation.html">
+                  Preserving Navigation when Starting an Activity
+                  </a>
+              </li>
+              <li>
+                  <a href="<?cs var:toroot ?>training/notify-user/managing.html">
+                  Updating Notifications
+                  </a>
+              </li>
+              <li>
+                  <a href="<?cs var:toroot ?>training/notify-user/expanded.html">
+                  Using Big View Styles
+                  </a>
+              </li>
+              <li>
+                  <a href="<?cs var:toroot ?>training/notify-user/display-progress.html">
+                  Displaying Progress in a Notification
+                  </a>
+              </li>
+          </ul>
+      </li>
+
+      <li class="nav-section">
+        <div class="nav-section-header">
+          <a href="<?cs var:toroot ?>training/search/index.html"
+             description=
+             "How to properly add a search interface to your app and create a searchable database."
+            >Adding Search Functionality</a>
+        </div>
+        <ul>
+          <li><a href="<?cs var:toroot ?>training/search/setup.html">
+            Setting up the Search Interface
+          </a>
+          </li>
+          <li><a href="<?cs var:toroot ?>training/search/search.html">
+            Storing and Searching for Data
+          </a>
+          </li>
+          <li><a href="<?cs var:toroot ?>training/search/backward-compat.html">
+            Remaining Backward Compatible
+          </a>
+          </li>
+        </ul>
+      </li>
       
       
       <li class="nav-section">
@@ -620,19 +681,19 @@
             zh-CN-lang="支持各种屏幕尺寸"
             ko-lang="다양한 화면 크기 지원"
             ja-lang="さまざまな画面サイズのサポート"
-            es-lang="Cómo admitir varios tamaños de pantalla"               
+            es-lang="Cómo admitir varios tamaños de pantalla"
             >Supporting Different Screen Sizes</a>
           </li>
           <li><a href="/training/multiscreen/screendensities.html"
             zh-CN-lang="支持各种屏幕密度"
             ja-lang="さまざまな画面密度のサポート"
-            es-lang="Cómo admitir varias densidades de pantalla"               
+            es-lang="Cómo admitir varias densidades de pantalla"
             >Supporting Different Screen Densities</a>
           </li>
           <li><a href="/training/multiscreen/adaptui.html"
             zh-CN-lang="实施自适应用户界面流程"
             ja-lang="順応性のある UI フローの実装"
-            es-lang="Cómo implementar interfaces de usuario adaptables"               
+            es-lang="Cómo implementar interfaces de usuario adaptables"
             >Implementing Adaptive UI Flows</a>
           </li>
         </ul>
@@ -656,29 +717,6 @@
           </li>
           <li><a href="<?cs var:toroot ?>training/tv/unsupported-features-tv.html">
             Handling Features Not Supported on TV
-          </a>
-          </li>
-        </ul>
-      </li>
-
-      <li class="nav-section">
-        <div class="nav-section-header">
-          <a href="<?cs var:toroot ?>training/search/index.html"
-             description=
-             "How to properly add a search interface to your app and create a searchable database."
-            >Adding Search Functionality</a>
-        </div>
-        <ul>
-          <li><a href="<?cs var:toroot ?>training/search/setup.html">
-            Setting up the Search Interface
-          </a>
-          </li>
-          <li><a href="<?cs var:toroot ?>training/search/search.html">
-            Storing and Searching for Data
-          </a>
-          </li>
-          <li><a href="<?cs var:toroot ?>training/search/backward-compat.html">
-            Remaining Backward Compatible
           </a>
           </li>
         </ul>
@@ -763,7 +801,81 @@
   </li>
   <!-- End best UX and UI -->
   
+
+  <li class="nav-section">
+    <div class="nav-section-header">
+      <a href="<?cs var:toroot ?>training/best-user-input.html">
+      <span class="small">Best Practices for</span><br/>
+              User Input
+      </a>
+    </div>
+    <ul>
+         
+      <li class="nav-section">
+        <div class="nav-section-header">
+          <a href="<?cs var:toroot ?>training/gestures/index.html"
+             description=
+             "How to write apps that allow users to interact with the touch screen via touch gestures."
+            >Using Touch Gestures</a>
+        </div>
+        <ul>
+          <li><a href="<?cs var:toroot ?>training/gestures/detector.html">
+            Detecting Common Gestures
+          </a>
+          </li>
+          <li><a href="<?cs var:toroot ?>training/gestures/movement.html">
+            Tracking Movement
+          </a>
+          </li>
+          <li><a href="<?cs var:toroot ?>training/gestures/scroll.html">
+            Animating a Scroll Gesture
+          </a>
+          </li>
+          <li><a href="<?cs var:toroot ?>training/gestures/multi.html">
+            Handling Multi-Touch Gestures
+          </a>
+          </li>
+          <li><a href="<?cs var:toroot ?>training/gestures/scale.html">
+            Dragging and Scaling
+          </a>
+          </li>
+          <li><a href="<?cs var:toroot ?>training/gestures/viewgroup.html">
+            Managing Touch Events in a ViewGroup
+          </a>
+          </li>
+        </ul>
+      </li>
       
+      <li class="nav-section">
+        <div class="nav-section-header">
+          <a href="<?cs var:toroot ?>training/keyboard-input/index.html"
+             description=
+             "How to specify the appearance and behaviors of soft input methods (such
+             as on-screen keyboards) and how to optimize the experience with
+             hardware keyboards."
+            >Handling Keyboard Input</a>
+        </div>
+        <ul>
+          <li><a href="<?cs var:toroot ?>training/keyboard-input/style.html">
+            Specifying the Input Method Type
+          </a>
+          </li>
+          <li><a href="<?cs var:toroot ?>training/keyboard-input/visibility.html">
+            Handling Input Method Visibility
+          </a>
+          </li>
+          <li><a href="<?cs var:toroot ?>training/keyboard-input/navigation.html">
+            Supporting Keyboard Navigation
+          </a>
+          </li>
+          <li><a href="<?cs var:toroot ?>training/keyboard-input/commands.html">
+            Handling Keyboard Actions
+          </a>
+          </li>
+        </ul>
+      </li>
+    </ul>
+  </li> <!-- end of User Input -->    
 
   <li class="nav-section">
     <div class="nav-section-header">
@@ -810,6 +922,46 @@
         </ul>
       </li>
 
+      <li class="nav-section">
+        <div class="nav-section-header">
+          <a href="<?cs var:toroot ?>training/run-background-service/index.html"
+             description=
+             "How to improve UI performance and responsiveness by sending work to a
+             Service running in the background"
+            >Running in a Background Service</a>
+        </div>
+        <ul>
+          <li><a href="<?cs var:toroot ?>training/run-background-service/create-service.html">
+            Creating a Background Service
+          </a>
+          </li>
+          <li><a href="<?cs var:toroot ?>training/run-background-service/send-request.html">
+            Sending Work Requests to the Background Service
+          </a>
+          </li>
+          <li><a href="<?cs var:toroot ?>training/run-background-service/report-status.html">
+            Reporting Work Status
+          </a>
+          </li>
+        </ul>
+      </li>
+
+      <li class="nav-section">
+        <div class="nav-section-header">
+          <a href="<?cs var:toroot ?>training/load-data-background/index.html"
+             description="How to use CursorLoader to query data without
+             affecting UI responsiveness."
+            >Loading Data in the Background</a>
+        </div>
+        <ul>
+          <li><a href="<?cs var:toroot ?>training/load-data-background/setup-loader.html">
+            Running a Query with a CursorLoader</a>
+          </li>
+          <li><a href="<?cs var:toroot ?>training/load-data-background/handle-results.html">
+            Handling the Results</a>
+          </li>
+        </ul>
+      </li>
       
       <li class="nav-section">
         <div class="nav-section-header">
@@ -826,26 +978,53 @@
           <li><a href="/training/monitoring-device-state/battery-monitoring.html"
             zh-CN-lang="监控电池电量和充电状态"
             ja-lang="電池残量と充電状態の監視"
-            es-lang="Cómo controlar el nivel de batería y el estado de carga"               
+            es-lang="Cómo controlar el nivel de batería y el estado de carga"
             >Monitoring the Battery Level and Charging State</a>
           </li>
           <li><a href="/training/monitoring-device-state/docking-monitoring.html"
             zh-CN-lang="确定和监控基座对接状态和类型"
             ja-lang="ホルダーの装着状態とタイプの特定と監視"
-            es-lang="Cómo determinar y controlar el tipo de conector y el estado de la conexión"               
+            es-lang="Cómo determinar y controlar el tipo de conector y el estado de la conexión"
             >Determining and Monitoring the Docking State and Type</a>
           </li>
           <li><a href="/training/monitoring-device-state/connectivity-monitoring.html"
             zh-CN-lang="确定和监控网络连接状态"
             ja-lang="接続状態の特定と監視"
-            es-lang="Cómo determinar y controlar el estado de la conectividad"               
+            es-lang="Cómo determinar y controlar el estado de la conectividad"
             >Determining and Monitoring the Connectivity Status</a>
           </li>
           <li><a href="/training/monitoring-device-state/manifest-receivers.html"
             zh-CN-lang="根据需要操作广播接收器"
             ja-lang="オンデマンドでのブロードキャスト レシーバ操作"
-            es-lang="Cómo manipular los receptores de emisión bajo demanda"               
+            es-lang="Cómo manipular los receptores de emisión bajo demanda"
             >Manipulating Broadcast Receivers On Demand</a>
+          </li>
+        </ul>
+      </li>
+      <li class="nav-section">
+        <div class="nav-section-header">
+          <a href="<?cs var:toroot ?>training/multiple-threads/index.html"
+             description=
+             "How to improve the performance and scalability of long-running operations by
+              dispatching work to multiple threads.">
+             Sending Operations to Multiple Threads</a>
+        </div>
+        <ul>
+          <li><a href="<?cs var:toroot ?>training/multiple-threads/define-runnable.html">
+            Specifying the Code to Run on a Thread
+          </a>
+          </li>
+          <li><a href="<?cs var:toroot ?>training/multiple-threads/create-threadpool.html">
+            Creating a Manager for Multiple Threads
+          </a>
+          </li>
+          <li><a href="<?cs var:toroot ?>training/multiple-threads/run-code.html">
+            Running Code on a Thread Pool Thread
+          </a>
+          </li>
+          <li><a href="<?cs var:toroot ?>training/multiple-threads/communicate-ui.html">
+            Communicating with the UI Thread
+          </a>
           </li>
         </ul>
       </li>
@@ -863,6 +1042,12 @@
            description=
            "How to efficiently use the Java Native Interface with the Android NDK."
           >JNI Tips</a>
+      </li>
+      <li>
+        <a href="<?cs var:toroot ?>training/articles/smp.html"
+           description=
+           "Tips for coding Android apps on symmetric multiprocessor systems."
+          >SMP Primer for Android</a>
       </li>
     </ul>
   </li> <!-- end of Performance -->
@@ -912,6 +1097,30 @@
       </a>
     </div>
     <ul>
+      <li class="nav-section">
+      <div class="nav-section-header"><a href="<?cs var:toroot ?>training/in-app-billing/index.html"
+         description="How to sell in-app products from your application using In-app Billing.">
+            Selling In-app Products
+          </a></div>
+        <ul>
+          <li><a href="<?cs var:toroot ?>training/in-app-billing/preparing-iab-app.html">
+            <span class="en">Preparing Your App</span>
+          </a>
+          </li>
+          <li><a href="<?cs var:toroot ?>training/in-app-billing/list-iab-products.html">
+            <span class="en">Establishing Products for Sale</span>
+          </a>
+          </li>
+          <li><a href="<?cs var:toroot ?>training/in-app-billing/purchase-iab-products.html">
+            <span class="en">Purchasing Products</span>
+          </a>
+          </li>
+          <li><a href="<?cs var:toroot ?>training/in-app-billing/test-iab-app.html">
+            <span class="en">Testing Your App</span>
+          </a>
+          </li>
+        </ul>
+      </li>
       
       <li class="nav-section">
         <div class="nav-section-header">
@@ -940,8 +1149,6 @@
           </li>
         </ul>
       </li>
-      
-      
       <li class="nav-section">
         <div class="nav-section-header">
           <a href="<?cs var:toroot ?>training/monetization/index.html"
@@ -962,7 +1169,6 @@
   <!-- End best Publishing -->
 
 </ul><!-- nav -->
-
 <script type="text/javascript">
 <!--
     buildToggleLists();

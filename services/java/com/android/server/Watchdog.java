@@ -29,6 +29,7 @@ import android.content.IntentFilter;
 import android.os.BatteryManager;
 import android.os.Debug;
 import android.os.Handler;
+import android.os.Looper;
 import android.os.Message;
 import android.os.Process;
 import android.os.ServiceManager;
@@ -39,6 +40,8 @@ import android.util.Log;
 import android.util.Slog;
 
 import java.io.File;
+import java.io.FileWriter;
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Calendar;
 
@@ -112,6 +115,10 @@ public class Watchdog extends Thread {
      * Used for scheduling monitor callbacks and checking memory usage.
      */
     final class HeartbeatHandler extends Handler {
+        HeartbeatHandler(Looper looper) {
+            super(looper);
+        }
+
         @Override
         public void handleMessage(Message msg) {
             switch (msg.what) {
@@ -181,7 +188,9 @@ public class Watchdog extends Thread {
 
     private Watchdog() {
         super("watchdog");
-        mHandler = new HeartbeatHandler();
+        // Explicitly bind the HeartbeatHandler to run on the ServerThread, so
+        // that it can't get accidentally bound to another thread.
+        mHandler = new HeartbeatHandler(Looper.getMainLooper());
     }
 
     public void init(Context context, BatteryService battery,
@@ -437,6 +446,16 @@ public class Watchdog extends Thread {
             // Pull our own kernel thread stacks as well if we're configured for that
             if (RECORD_KERNEL_THREADS) {
                 dumpKernelStackTraces();
+            }
+
+            // Trigger the kernel to dump all blocked threads to the kernel log
+            try {
+                FileWriter sysrq_trigger = new FileWriter("/proc/sysrq-trigger");
+                sysrq_trigger.write("w");
+                sysrq_trigger.close();
+            } catch (IOException e) {
+                Slog.e(TAG, "Failed to write to /proc/sysrq-trigger");
+                Slog.e(TAG, e.getMessage());
             }
 
             // Try to add the error to the dropbox, but assuming that the ActivityManager

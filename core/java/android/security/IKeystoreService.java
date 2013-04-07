@@ -78,7 +78,7 @@ public interface IKeystoreService extends IInterface {
                 return _result;
             }
 
-            public int insert(String name, byte[] item) throws RemoteException {
+            public int insert(String name, byte[] item, int uid) throws RemoteException {
                 Parcel _data = Parcel.obtain();
                 Parcel _reply = Parcel.obtain();
                 int _result;
@@ -86,6 +86,7 @@ public interface IKeystoreService extends IInterface {
                     _data.writeInterfaceToken(DESCRIPTOR);
                     _data.writeString(name);
                     _data.writeByteArray(item);
+                    _data.writeInt(uid);
                     mRemote.transact(Stub.TRANSACTION_insert, _data, _reply, 0);
                     _reply.readException();
                     _result = _reply.readInt();
@@ -96,13 +97,14 @@ public interface IKeystoreService extends IInterface {
                 return _result;
             }
 
-            public int del(String name) throws RemoteException {
+            public int del(String name, int uid) throws RemoteException {
                 Parcel _data = Parcel.obtain();
                 Parcel _reply = Parcel.obtain();
                 int _result;
                 try {
                     _data.writeInterfaceToken(DESCRIPTOR);
                     _data.writeString(name);
+                    _data.writeInt(uid);
                     mRemote.transact(Stub.TRANSACTION_del, _data, _reply, 0);
                     _reply.readException();
                     _result = _reply.readInt();
@@ -113,13 +115,14 @@ public interface IKeystoreService extends IInterface {
                 return _result;
             }
 
-            public int exist(String name) throws RemoteException {
+            public int exist(String name, int uid) throws RemoteException {
                 Parcel _data = Parcel.obtain();
                 Parcel _reply = Parcel.obtain();
                 int _result;
                 try {
                     _data.writeInterfaceToken(DESCRIPTOR);
                     _data.writeString(name);
+                    _data.writeInt(uid);
                     mRemote.transact(Stub.TRANSACTION_exist, _data, _reply, 0);
                     _reply.readException();
                     _result = _reply.readInt();
@@ -130,19 +133,24 @@ public interface IKeystoreService extends IInterface {
                 return _result;
             }
 
-            public String[] saw(String name) throws RemoteException {
+            public String[] saw(String name, int uid) throws RemoteException {
                 Parcel _data = Parcel.obtain();
                 Parcel _reply = Parcel.obtain();
                 String[] _result;
                 try {
                     _data.writeInterfaceToken(DESCRIPTOR);
                     _data.writeString(name);
+                    _data.writeInt(uid);
                     mRemote.transact(Stub.TRANSACTION_saw, _data, _reply, 0);
                     _reply.readException();
                     int size = _reply.readInt();
                     _result = new String[size];
                     for (int i = 0; i < size; i++) {
                         _result[i] = _reply.readString();
+                    }
+                    int _ret = _reply.readInt();
+                    if (_ret != 1) {
+                        return null;
                     }
                 } finally {
                     _reply.recycle();
@@ -235,13 +243,14 @@ public interface IKeystoreService extends IInterface {
                 return _result;
             }
 
-            public int generate(String name) throws RemoteException {
+            public int generate(String name, int uid) throws RemoteException {
                 Parcel _data = Parcel.obtain();
                 Parcel _reply = Parcel.obtain();
                 int _result;
                 try {
                     _data.writeInterfaceToken(DESCRIPTOR);
                     _data.writeString(name);
+                    _data.writeInt(uid);
                     mRemote.transact(Stub.TRANSACTION_generate, _data, _reply, 0);
                     _reply.readException();
                     _result = _reply.readInt();
@@ -252,7 +261,7 @@ public interface IKeystoreService extends IInterface {
                 return _result;
             }
 
-            public int import_key(String name, byte[] data) throws RemoteException {
+            public int import_key(String name, byte[] data, int uid) throws RemoteException {
                 Parcel _data = Parcel.obtain();
                 Parcel _reply = Parcel.obtain();
                 int _result;
@@ -260,6 +269,7 @@ public interface IKeystoreService extends IInterface {
                     _data.writeInterfaceToken(DESCRIPTOR);
                     _data.writeString(name);
                     _data.writeByteArray(data);
+                    _data.writeInt(uid);
                     mRemote.transact(Stub.TRANSACTION_import, _data, _reply, 0);
                     _reply.readException();
                     _result = _reply.readInt();
@@ -324,13 +334,14 @@ public interface IKeystoreService extends IInterface {
                 return _result;
             }
 
-            public int del_key(String name) throws RemoteException {
+            public int del_key(String name, int uid) throws RemoteException {
                 Parcel _data = Parcel.obtain();
                 Parcel _reply = Parcel.obtain();
                 int _result;
                 try {
                     _data.writeInterfaceToken(DESCRIPTOR);
                     _data.writeString(name);
+                    _data.writeInt(uid);
                     mRemote.transact(Stub.TRANSACTION_del_key, _data, _reply, 0);
                     _reply.readException();
                     _result = _reply.readInt();
@@ -394,6 +405,45 @@ public interface IKeystoreService extends IInterface {
                 }
                 return _result;
             }
+
+            @Override
+            public int duplicate(String srcKey, int srcUid, String destKey, int destUid)
+                    throws RemoteException {
+                Parcel _data = Parcel.obtain();
+                Parcel _reply = Parcel.obtain();
+                int _result;
+                try {
+                    _data.writeInterfaceToken(DESCRIPTOR);
+                    _data.writeString(srcKey);
+                    _data.writeInt(srcUid);
+                    _data.writeString(destKey);
+                    _data.writeInt(destUid);
+                    mRemote.transact(Stub.TRANSACTION_duplicate, _data, _reply, 0);
+                    _reply.readException();
+                    _result = _reply.readInt();
+                } finally {
+                    _reply.recycle();
+                    _data.recycle();
+                }
+                return _result;
+            }
+
+            @Override
+            public int is_hardware_backed() throws RemoteException {
+                Parcel _data = Parcel.obtain();
+                Parcel _reply = Parcel.obtain();
+                int _result;
+                try {
+                    _data.writeInterfaceToken(DESCRIPTOR);
+                    mRemote.transact(Stub.TRANSACTION_is_hardware_backed, _data, _reply, 0);
+                    _reply.readException();
+                    _result = _reply.readInt();
+                } finally {
+                    _reply.recycle();
+                    _data.recycle();
+                }
+                return _result;
+            }
         }
 
         private static final String DESCRIPTOR = "android.security.keystore";
@@ -418,6 +468,8 @@ public interface IKeystoreService extends IInterface {
         static final int TRANSACTION_grant = IBinder.FIRST_CALL_TRANSACTION + 17;
         static final int TRANSACTION_ungrant = IBinder.FIRST_CALL_TRANSACTION + 18;
         static final int TRANSACTION_getmtime = IBinder.FIRST_CALL_TRANSACTION + 19;
+        static final int TRANSACTION_duplicate = IBinder.FIRST_CALL_TRANSACTION + 20;
+        static final int TRANSACTION_is_hardware_backed = IBinder.FIRST_CALL_TRANSACTION + 21;
 
         /**
          * Cast an IBinder object into an IKeystoreService interface, generating
@@ -467,13 +519,13 @@ public interface IKeystoreService extends IInterface {
 
     public byte[] get(String name) throws RemoteException;
 
-    public int insert(String name, byte[] item) throws RemoteException;
+    public int insert(String name, byte[] item, int uid) throws RemoteException;
 
-    public int del(String name) throws RemoteException;
+    public int del(String name, int uid) throws RemoteException;
 
-    public int exist(String name) throws RemoteException;
+    public int exist(String name, int uid) throws RemoteException;
 
-    public String[] saw(String name) throws RemoteException;
+    public String[] saw(String name, int uid) throws RemoteException;
 
     public int reset() throws RemoteException;
 
@@ -485,9 +537,9 @@ public interface IKeystoreService extends IInterface {
 
     public int zero() throws RemoteException;
 
-    public int generate(String name) throws RemoteException;
+    public int generate(String name, int uid) throws RemoteException;
 
-    public int import_key(String name, byte[] data) throws RemoteException;
+    public int import_key(String name, byte[] data, int uid) throws RemoteException;
 
     public byte[] sign(String name, byte[] data) throws RemoteException;
 
@@ -495,11 +547,16 @@ public interface IKeystoreService extends IInterface {
 
     public byte[] get_pubkey(String name) throws RemoteException;
 
-    public int del_key(String name) throws RemoteException;
+    public int del_key(String name, int uid) throws RemoteException;
 
     public int grant(String name, int granteeUid) throws RemoteException;
 
     public int ungrant(String name, int granteeUid) throws RemoteException;
 
     public long getmtime(String name) throws RemoteException;
+
+    public int duplicate(String srcKey, int srcUid, String destKey, int destUid)
+            throws RemoteException;
+
+    public int is_hardware_backed() throws RemoteException;
 }
