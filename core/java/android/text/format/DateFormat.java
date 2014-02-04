@@ -44,6 +44,9 @@ import libcore.icu.LocaleData;
  * for both formatting and parsing dates. For the canonical documentation
  * of format strings, see {@link java.text.SimpleDateFormat}.
  *
+ * <p>In cases where the system does not provide a suitable pattern,
+ * this class offers the {@link #getBestDateTimePattern} method.
+ *
  * <p>The {@code format} methods in this class implement a subset of Unicode
  * <a href="http://www.unicode.org/reports/tr35/#Date_Format_Patterns">UTS #35</a> patterns.
  * The subset currently supported by this class includes the following format characters:
@@ -165,6 +168,37 @@ public class DateFormat {
     }
 
     /**
+     * Returns the best possible localized form of the given skeleton for the given
+     * locale. A skeleton is similar to, and uses the same format characters as, a Unicode
+     * <a href="http://www.unicode.org/reports/tr35/#Date_Format_Patterns">UTS #35</a>
+     * pattern.
+     *
+     * <p>One difference is that order is irrelevant. For example, "MMMMd" will return
+     * "MMMM d" in the {@code en_US} locale, but "d. MMMM" in the {@code de_CH} locale.
+     *
+     * <p>Note also in that second example that the necessary punctuation for German was
+     * added. For the same input in {@code es_ES}, we'd have even more extra text:
+     * "d 'de' MMMM".
+     *
+     * <p>This method will automatically correct for grammatical necessity. Given the
+     * same "MMMMd" input, this method will return "d LLLL" in the {@code fa_IR} locale,
+     * where stand-alone months are necessary. Lengths are preserved where meaningful,
+     * so "Md" would give a different result to "MMMd", say, except in a locale such as
+     * {@code ja_JP} where there is only one length of month.
+     *
+     * <p>This method will only return patterns that are in CLDR, and is useful whenever
+     * you know what elements you want in your format string but don't want to make your
+     * code specific to any one locale.
+     *
+     * @param locale the locale into which the skeleton should be localized
+     * @param skeleton a skeleton as described above
+     * @return a string pattern suitable for use with {@link java.text.SimpleDateFormat}.
+     */
+    public static String getBestDateTimePattern(Locale locale, String skeleton) {
+        return ICU.getBestDateTimePattern(skeleton, locale.toString());
+    }
+
+    /**
      * Returns a {@link java.text.DateFormat} object that can format the time according
      * to the current locale and the user's 12-/24-hour clock preference.
      * @param context the application context
@@ -246,13 +280,9 @@ public class DateFormat {
             }
         }
 
-        /*
-         * The setting is not set; use the default.
-         * We use a resource string here instead of just DateFormat.SHORT
-         * so that we get a four-digit year instead a two-digit year.
-         */
-        value = context.getString(R.string.numeric_date_format);
-        return value;
+        // The setting is not set; use the locale's default.
+        LocaleData d = LocaleData.get(context.getResources().getConfiguration().locale);
+        return d.shortDateFormat4;
     }
 
     /**
@@ -331,6 +361,16 @@ public class DateFormat {
      * @hide
      */
     public static boolean hasSeconds(CharSequence inFormat) {
+        return hasDesignator(inFormat, SECONDS);
+    }
+
+    /**
+     * Test if a format string contains the given designator. Always returns
+     * {@code false} if the input format is {@code null}.
+     *
+     * @hide
+     */
+    public static boolean hasDesignator(CharSequence inFormat, char designator) {
         if (inFormat == null) return false;
 
         final int length = inFormat.length();
@@ -344,7 +384,7 @@ public class DateFormat {
 
             if (c == QUOTE) {
                 count = skipQuotedText(inFormat, i, length);
-            } else if (c == SECONDS) {
+            } else if (c == designator) {
                 return true;
             }
         }

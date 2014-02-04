@@ -18,7 +18,6 @@ package android.net.wifi;
 
 import android.content.Context;
 import android.content.Intent;
-import android.net.DhcpInfoInternal;
 import android.net.LinkAddress;
 import android.net.LinkProperties;
 import android.net.NetworkUtils;
@@ -45,9 +44,11 @@ import java.io.BufferedOutputStream;
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.EOFException;
+import java.io.FileDescriptor;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
+import java.io.PrintWriter;
 import java.net.InetAddress;
 import java.net.UnknownHostException;
 import java.util.ArrayList;
@@ -155,7 +156,7 @@ class WifiConfigStore {
      * Fetch the list of configured networks
      * and enable all stored networks in supplicant.
      */
-    void initialize() {
+    void loadAndEnableAllNetworks() {
         if (DBG) log("Loading config and enabling all networks");
         loadConfiguredNetworks();
         enableAllNetworks();
@@ -394,6 +395,23 @@ class WifiConfigStore {
         return ret;
     }
 
+    void disableAllNetworks() {
+        boolean networkDisabled = false;
+        for(WifiConfiguration config : mConfiguredNetworks.values()) {
+            if(config != null && config.status != Status.DISABLED) {
+                if(mWifiNative.disableNetwork(config.networkId)) {
+                    networkDisabled = true;
+                    config.status = Status.DISABLED;
+                } else {
+                    loge("Disable network failed on " + config.networkId);
+                }
+            }
+        }
+
+        if (networkDisabled) {
+            sendConfiguredNetworksChangedBroadcast();
+        }
+    }
     /**
      * Disable a network. Note that there is no saveConfig operation.
      * @param netId network to be disabled
@@ -501,45 +519,12 @@ class WifiConfigStore {
     }
 
     /**
-     * get IP configuration for a given network id
-     * TODO: We cannot handle IPv6 addresses for configuration
-     *       right now until NetworkUtils is fixed. When we do
-     *       that, we should remove handling DhcpInfo and move
-     *       to using LinkProperties
-     * @return DhcpInfoInternal for the given network id
-     */
-    DhcpInfoInternal getIpConfiguration(int netId) {
-        DhcpInfoInternal dhcpInfoInternal = new DhcpInfoInternal();
-        LinkProperties linkProperties = getLinkProperties(netId);
-
-        if (linkProperties != null) {
-            Iterator<LinkAddress> iter = linkProperties.getLinkAddresses().iterator();
-            if (iter.hasNext()) {
-                LinkAddress linkAddress = iter.next();
-                dhcpInfoInternal.ipAddress = linkAddress.getAddress().getHostAddress();
-                for (RouteInfo route : linkProperties.getRoutes()) {
-                    dhcpInfoInternal.addRoute(route);
-                }
-                dhcpInfoInternal.prefixLength = linkAddress.getNetworkPrefixLength();
-                Iterator<InetAddress> dnsIterator = linkProperties.getDnses().iterator();
-                dhcpInfoInternal.dns1 = dnsIterator.next().getHostAddress();
-                if (dnsIterator.hasNext()) {
-                    dhcpInfoInternal.dns2 = dnsIterator.next().getHostAddress();
-                }
-            }
-        }
-        return dhcpInfoInternal;
-    }
-
-    /**
      * set IP configuration for a given network id
      */
-    void setIpConfiguration(int netId, DhcpInfoInternal dhcpInfo) {
-        LinkProperties linkProperties = dhcpInfo.makeLinkProperties();
-
+    void setLinkProperties(int netId, LinkProperties linkProperties) {
         WifiConfiguration config = mConfiguredNetworks.get(netId);
         if (config != null) {
-            // add old proxy details
+            // add old proxy details - TODO - is this still needed?
             if(config.linkProperties != null) {
                 linkProperties.setHttpProxy(config.linkProperties.getHttpProxy());
             }
@@ -551,7 +536,7 @@ class WifiConfigStore {
      * clear IP configuration for a given network id
      * @param network id
      */
-    void clearIpConfiguration(int netId) {
+    void clearLinkProperties(int netId) {
         WifiConfiguration config = mConfiguredNetworks.get(netId);
         if (config != null && config.linkProperties != null) {
             // Clear everything except proxy
@@ -649,6 +634,8 @@ class WifiConfigStore {
             if (config.priority > mLastPriority) {
                 mLastPriority = config.priority;
             }
+            config.ipAssignment = IpAssignment.DHCP;
+            config.proxySettings = ProxySettings.NONE;
             mConfiguredNetworks.put(config.networkId, config);
             mNetworkIds.put(configKey(config), config.networkId);
         }
@@ -846,8 +833,9 @@ class WifiConfigStore {
 
             while (true) {
                 int id = -1;
-                IpAssignment ipAssignment = IpAssignment.UNASSIGNED;
-                ProxySettings proxySettings = ProxySettings.UNASSIGNED;
+                // Default is DHCP with no proxy
+                IpAssignment ipAssignment = IpAssignment.DHCP;
+                ProxySettings proxySettings = ProxySettings.NONE;
                 LinkProperties linkProperties = new LinkProperties();
                 String proxyHost = null;
                 int proxyPort = -1;
@@ -917,7 +905,8 @@ class WifiConfigStore {
                                 config.ipAssignment = ipAssignment;
                                 break;
                             case UNASSIGNED:
-                                //Ignore
+                                loge("BUG: Found UNASSIGNED IP on file, use DHCP");
+                                config.ipAssignment = IpAssignment.DHCP;
                                 break;
                             default:
                                 loge("Ignore invalid ip assignment while reading");
@@ -935,7 +924,8 @@ class WifiConfigStore {
                                 config.proxySettings = proxySettings;
                                 break;
                             case UNASSIGNED:
-                                //Ignore
+                                loge("BUG: Found UNASSIGNED proxy on file, use NONE");
+                                config.proxySettings = ProxySettings.NONE;
                                 break;
                             default:
                                 loge("Ignore invalid proxy settings while reading");
@@ -1121,7 +1111,8 @@ class WifiConfigStore {
                 break setVariables;
             }
 
-            if (config.enterpriseConfig != null) {
+            if (config.enterpriseConfig != null &&
+                    config.enterpriseConfig.getEapMethod() != WifiEnterpriseConfig.Eap.NONE) {
 
                 WifiEnterpriseConfig enterpriseConfig = config.enterpriseConfig;
 
@@ -1191,6 +1182,8 @@ class WifiConfigStore {
         WifiConfiguration currentConfig = mConfiguredNetworks.get(netId);
         if (currentConfig == null) {
             currentConfig = new WifiConfiguration();
+            currentConfig.ipAssignment = IpAssignment.DHCP;
+            currentConfig.proxySettings = ProxySettings.NONE;
             currentConfig.networkId = netId;
         }
 
@@ -1211,7 +1204,7 @@ class WifiConfigStore {
             WifiConfiguration newConfig) {
         boolean ipChanged = false;
         boolean proxyChanged = false;
-        LinkProperties linkProperties = new LinkProperties();
+        LinkProperties linkProperties = null;
 
         switch (newConfig.ipAssignment) {
             case STATIC:
@@ -1277,10 +1270,10 @@ class WifiConfigStore {
         }
 
         if (!ipChanged) {
-            addIpSettingsFromConfig(linkProperties, currentConfig);
+            linkProperties = copyIpSettingsFromConfig(currentConfig);
         } else {
             currentConfig.ipAssignment = newConfig.ipAssignment;
-            addIpSettingsFromConfig(linkProperties, newConfig);
+            linkProperties = copyIpSettingsFromConfig(newConfig);
             log("IP config changed SSID = " + currentConfig.SSID + " linkProperties: " +
                     linkProperties.toString());
         }
@@ -1306,8 +1299,9 @@ class WifiConfigStore {
         return new NetworkUpdateResult(ipChanged, proxyChanged);
     }
 
-    private void addIpSettingsFromConfig(LinkProperties linkProperties,
-            WifiConfiguration config) {
+    private LinkProperties copyIpSettingsFromConfig(WifiConfiguration config) {
+        LinkProperties linkProperties = new LinkProperties();
+        linkProperties.setInterfaceName(config.linkProperties.getInterfaceName());
         for (LinkAddress linkAddr : config.linkProperties.getLinkAddresses()) {
             linkProperties.addLinkAddress(linkAddr);
         }
@@ -1317,6 +1311,7 @@ class WifiConfigStore {
         for (InetAddress dns : config.linkProperties.getDnses()) {
             linkProperties.addDns(dns);
         }
+        return linkProperties;
     }
 
     /**
@@ -1483,6 +1478,8 @@ class WifiConfigStore {
         if (config.enterpriseConfig.migrateOldEapTlsNative(mWifiNative, netId)) {
             saveConfig();
         }
+
+        config.enterpriseConfig.migrateCerts(mKeyStore);
     }
 
     private String removeDoubleQuotes(String string) {
@@ -1553,15 +1550,14 @@ class WifiConfigStore {
         return key.hashCode();
     }
 
-    String dump() {
-        StringBuffer sb = new StringBuffer();
-        String LS = System.getProperty("line.separator");
-        sb.append("mLastPriority ").append(mLastPriority).append(LS);
-        sb.append("Configured networks ").append(LS);
+    void dump(FileDescriptor fd, PrintWriter pw, String[] args) {
+        pw.println("WifiConfigStore");
+        pw.println("mLastPriority " + mLastPriority);
+        pw.println("Configured networks");
         for (WifiConfiguration conf : getConfiguredNetworks()) {
-            sb.append(conf).append(LS);
+            pw.println(conf);
         }
-        return sb.toString();
+        pw.println();
     }
 
     public String getConfigFile() {

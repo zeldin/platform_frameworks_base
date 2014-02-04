@@ -16,6 +16,8 @@
 
 package android.security;
 
+import com.android.org.conscrypt.NativeCrypto;
+
 import android.os.RemoteException;
 import android.os.ServiceManager;
 import android.util.Log;
@@ -64,6 +66,18 @@ public class KeyStore {
         return new KeyStore(keystore);
     }
 
+    static int getKeyTypeForAlgorithm(String keyType) throws IllegalArgumentException {
+        if ("RSA".equalsIgnoreCase(keyType)) {
+            return NativeCrypto.EVP_PKEY_RSA;
+        } else if ("DSA".equalsIgnoreCase(keyType)) {
+            return NativeCrypto.EVP_PKEY_DSA;
+        } else if ("EC".equalsIgnoreCase(keyType)) {
+            return NativeCrypto.EVP_PKEY_EC;
+        } else {
+            throw new IllegalArgumentException("Unsupported key type: " + keyType);
+        }
+    }
+
     public State state() {
         final int ret;
         try {
@@ -101,14 +115,6 @@ public class KeyStore {
             Log.w(TAG, "Cannot connect to keystore", e);
             return false;
         }
-    }
-
-    public boolean put(String key, byte[] value, int uid) {
-        return put(key, value, uid, FLAG_ENCRYPTED);
-    }
-
-    public boolean put(String key, byte[] value) {
-        return put(key, value, UID_SELF);
     }
 
     public boolean delete(String key, int uid) {
@@ -196,21 +202,14 @@ public class KeyStore {
         }
     }
 
-    public boolean generate(String key, int uid, int flags) {
+    public boolean generate(String key, int uid, int keyType, int keySize, int flags,
+            byte[][] args) {
         try {
-            return mBinder.generate(key, uid, flags) == NO_ERROR;
+            return mBinder.generate(key, uid, keyType, keySize, flags, args) == NO_ERROR;
         } catch (RemoteException e) {
             Log.w(TAG, "Cannot connect to keystore", e);
             return false;
         }
-    }
-
-    public boolean generate(String key, int uid) {
-        return generate(key, uid, FLAG_ENCRYPTED);
-    }
-
-    public boolean generate(String key) {
-        return generate(key, UID_SELF);
     }
 
     public boolean importKey(String keyName, byte[] key, int uid, int flags) {
@@ -220,14 +219,6 @@ public class KeyStore {
             Log.w(TAG, "Cannot connect to keystore", e);
             return false;
         }
-    }
-
-    public boolean importKey(String keyName, byte[] key, int uid) {
-        return importKey(keyName, key, uid, FLAG_ENCRYPTED);
-    }
-
-    public boolean importKey(String keyName, byte[] key) {
-        return importKey(keyName, key, UID_SELF);
     }
 
     public byte[] getPubkey(String key) {

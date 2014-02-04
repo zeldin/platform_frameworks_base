@@ -26,7 +26,7 @@ import android.telephony.Rlog;
 public final class CellInfoLte extends CellInfo implements Parcelable {
 
     private static final String LOG_TAG = "CellInfoLte";
-    private static final boolean DBG = true;
+    private static final boolean DBG = false;
 
     private CellIdentityLte mCellIdentityLte;
     private CellSignalStrengthLte mCellSignalStrengthLte;
@@ -91,10 +91,11 @@ public final class CellInfoLte extends CellInfo implements Parcelable {
     public String toString() {
         StringBuffer sb = new StringBuffer();
 
-        sb.append("CellInfoLte:");
+        sb.append("CellInfoLte:{");
         sb.append(super.toString());
-        sb.append(", ").append(mCellIdentityLte);
-        sb.append(", ").append(mCellSignalStrengthLte);
+        sb.append(" ").append(mCellIdentityLte);
+        sb.append(" ").append(mCellSignalStrengthLte);
+        sb.append("}");
 
         return sb.toString();
     }

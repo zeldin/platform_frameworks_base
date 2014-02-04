@@ -173,6 +173,8 @@ public class WifiConfiguration implements Parcelable {
     public static final int DISABLED_DHCP_FAILURE                           = 2;
     /** @hide */
     public static final int DISABLED_AUTH_FAILURE                           = 3;
+    /** @hide */
+    public static final int DISABLED_ASSOCIATION_REJECT                     = 4;
 
     /**
      * The ID number that the supplicant uses to identify this
@@ -277,7 +279,6 @@ public class WifiConfiguration implements Parcelable {
     /**
      * The enterprise configuration details specifying the EAP method,
      * certificates and other settings associated with the EAP.
-     * @hide
      */
     public WifiEnterpriseConfig enterpriseConfig;
 

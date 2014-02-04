@@ -225,8 +225,6 @@ class BrowserFrame extends Handler {
             } else {
                 sJavaBridge.setCacheSize(4 * 1024 * 1024);
             }
-            // initialize CacheManager
-            CacheManager.init(appContext);
             // create CookieSyncManager with current Context
             CookieSyncManager.createInstance(appContext);
             // create PluginManager with current Context
@@ -500,8 +498,9 @@ class BrowserFrame extends Handler {
                     if (item != null) {
                         WebAddress uri = new WebAddress(item.getUrl());
                         String schemePlusHost = uri.getScheme() + uri.getHost();
-                        String[] up = mDatabase.getUsernamePassword(
-                                schemePlusHost);
+                        String[] up =
+                                WebViewDatabaseClassic.getInstance(mContext)
+                                        .getUsernamePassword(schemePlusHost);
                         if (up != null && up[0] != null) {
                             setUsernamePassword(up[0], up[1]);
                         }
@@ -757,12 +756,15 @@ class BrowserFrame extends Handler {
                 return null;
             }
         } else if (url.startsWith(ANDROID_ASSET)) {
-            url = url.replaceFirst(ANDROID_ASSET, "");
+            String assetUrl = url.replaceFirst(ANDROID_ASSET, "");
             try {
                 AssetManager assets = mContext.getAssets();
-                Uri uri = Uri.parse(url);
+                Uri uri = Uri.parse(assetUrl);
                 return assets.open(uri.getPath(), AssetManager.ACCESS_STREAMING);
             } catch (IOException e) {
+                return null;
+            } catch (Exception e) {
+                Log.w(LOGTAG, "Problem loading url: " + url, e);
                 return null;
             }
         } else if (mSettings.getAllowContentAccess() &&

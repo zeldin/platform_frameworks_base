@@ -934,6 +934,9 @@ bool AaptGroupEntry::getMncName(const char* name,
 
     if (out) {
         out->mnc = atoi(val);
+        if (out->mnc == 0) {
+            out->mnc = ACONFIGURATION_MNC_ZERO;
+        }
     }
 
     return true;
@@ -1182,6 +1185,11 @@ bool AaptGroupEntry::getDensityName(const char* name,
 
     if (strcmp(name, "xxhdpi") == 0) {
         if (out) out->density = ResTable_config::DENSITY_XXHIGH;
+        return true;
+    }
+
+    if (strcmp(name, "xxxhdpi") == 0) {
+        if (out) out->density = ResTable_config::DENSITY_XXXHIGH;
         return true;
     }
 
