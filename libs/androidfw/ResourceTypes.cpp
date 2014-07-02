@@ -2073,7 +2073,7 @@ String8 ResTable_config::toString() const {
                 break;
             default:
                 res.appendFormat("layoutDir=%d",
-                        dtohs(screenLayout&ResTable_config::MASK_LAYOUTDIR));
+                        screenLayout&ResTable_config::MASK_LAYOUTDIR);
                 break;
         }
     }
@@ -2106,7 +2106,7 @@ String8 ResTable_config::toString() const {
                 break;
             default:
                 res.appendFormat("screenLayoutSize=%d",
-                        dtohs(screenLayout&ResTable_config::MASK_SCREENSIZE));
+                        screenLayout&ResTable_config::MASK_SCREENSIZE);
                 break;
         }
     }
@@ -2121,7 +2121,7 @@ String8 ResTable_config::toString() const {
                 break;
             default:
                 res.appendFormat("screenLayoutLong=%d",
-                        dtohs(screenLayout&ResTable_config::MASK_SCREENLONG));
+                        screenLayout&ResTable_config::MASK_SCREENLONG);
                 break;
         }
     }
@@ -2138,7 +2138,7 @@ String8 ResTable_config::toString() const {
                 res.append("square");
                 break;
             default:
-                res.appendFormat("orientation=%d", dtohs(orientation));
+                res.appendFormat("orientation=%d", orientation);
                 break;
         }
     }
@@ -2159,7 +2159,7 @@ String8 ResTable_config::toString() const {
                 break;
             default:
                 res.appendFormat("uiModeType=%d",
-                        dtohs(screenLayout&ResTable_config::MASK_UI_MODE_TYPE));
+                        screenLayout&ResTable_config::MASK_UI_MODE_TYPE);
                 break;
         }
     }
@@ -2174,13 +2174,13 @@ String8 ResTable_config::toString() const {
                 break;
             default:
                 res.appendFormat("uiModeNight=%d",
-                        dtohs(uiMode&MASK_UI_MODE_NIGHT));
+                        uiMode&MASK_UI_MODE_NIGHT);
                 break;
         }
     }
-    if (density != DENSITY_DEFAULT) {
+    if (dtohs(density) != DENSITY_DEFAULT) {
         if (res.size() > 0) res.append("-");
-        switch (density) {
+        switch (dtohs(density)) {
             case ResTable_config::DENSITY_LOW:
                 res.append("ldpi");
                 break;
@@ -2220,7 +2220,7 @@ String8 ResTable_config::toString() const {
                 res.append("stylus");
                 break;
             default:
-                res.appendFormat("touchscreen=%d", dtohs(touchscreen));
+                res.appendFormat("touchscreen=%d", touchscreen);
                 break;
         }
     }
@@ -2237,7 +2237,7 @@ String8 ResTable_config::toString() const {
                 res.append("12key");
                 break;
             default:
-                res.appendFormat("keyboard=%d", dtohs(keyboard));
+                res.appendFormat("keyboard=%d", keyboard);
                 break;
         }
     }
@@ -2271,7 +2271,7 @@ String8 ResTable_config::toString() const {
                 res.append("wheel");
                 break;
             default:
-                res.appendFormat("navigation=%d", dtohs(navigation));
+                res.appendFormat("navigation=%d", navigation);
                 break;
         }
     }
@@ -2286,7 +2286,7 @@ String8 ResTable_config::toString() const {
                 break;
             default:
                 res.appendFormat("inputFlagsNavHidden=%d",
-                        dtohs(inputFlags&MASK_NAVHIDDEN));
+                        inputFlags&MASK_NAVHIDDEN);
                 break;
         }
     }
@@ -5467,8 +5467,10 @@ void ResTable::print(bool inclValues) const
         for (size_t pkgIndex=0; pkgIndex<pkgCount; pkgIndex++) {
             const Package* pkg = pg->packages[pkgIndex];
             size_t typeCount = pkg->types.size();
+            char16_t tmpName[sizeof(pkg->package->name)/sizeof(char16_t)];
+            strcpy16_dtoh(tmpName, pkg->package->name, sizeof(pkg->package->name)/sizeof(char16_t));
             printf("  Package %d id=%d name=%s typeCount=%d\n", (int)pkgIndex,
-                    pkg->package->id, String8(String16(pkg->package->name)).string(),
+		   dtohl(pkg->package->id), String8(String16(tmpName)).string(),
                     (int)typeCount);
             for (size_t typeIndex=0; typeIndex<typeCount; typeIndex++) {
                 const Type* typeConfigs = pkg->getType(typeIndex);
@@ -5481,7 +5483,7 @@ void ResTable::print(bool inclValues) const
                        (int)typeIndex, (int)NTC, (int)typeConfigs->entryCount);
                 if (typeConfigs->typeSpecFlags != NULL) {
                     for (size_t entryIndex=0; entryIndex<typeConfigs->entryCount; entryIndex++) {
-                        uint32_t resID = (0xff000000 & ((pkg->package->id)<<24))
+                        uint32_t resID = (0xff000000 & (dtohl(pkg->package->id)<<24))
                                     | (0x00ff0000 & ((typeIndex+1)<<16))
                                     | (0x0000ffff & (entryIndex));
                         resource_name resName;
@@ -5529,7 +5531,7 @@ void ResTable::print(bool inclValues) const
                             continue;
                         }
                         
-                        uint32_t resID = (0xff000000 & ((pkg->package->id)<<24))
+                        uint32_t resID = (0xff000000 & (dtohl(pkg->package->id)<<24))
                                     | (0x00ff0000 & ((typeIndex+1)<<16))
                                     | (0x0000ffff & (entryIndex));
                         resource_name resName;
