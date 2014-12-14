@@ -23,6 +23,8 @@ import android.content.Context;
 import android.content.res.Configuration;
 import android.location.LocationManager;
 import android.media.AudioManager;
+import android.media.RingtoneManager;
+import android.net.Uri;
 import android.os.IPowerManager;
 import android.os.RemoteException;
 import android.os.ServiceManager;
@@ -33,6 +35,7 @@ import android.text.TextUtils;
 import java.util.Locale;
 
 public class SettingsHelper {
+    private static final String SILENT_RINGTONE = "_silent";
     private Context mContext;
     private AudioManager mAudioManager;
 
@@ -63,8 +66,58 @@ public class SettingsHelper {
             setAutoRestore(Integer.parseInt(value) == 1);
         } else if (isAlreadyConfiguredCriticalAccessibilitySetting(name)) {
             return false;
+        } else if (Settings.System.RINGTONE.equals(name)
+                || Settings.System.NOTIFICATION_SOUND.equals(name)) {
+            setRingtone(name, value);
+            return false;
         }
         return true;
+    }
+
+    public String onBackupValue(String name, String value) {
+        // Special processing for backing up ringtones
+        if (Settings.System.RINGTONE.equals(name)
+                || Settings.System.NOTIFICATION_SOUND.equals(name)) {
+            if (value == null) {
+                // Silent ringtone
+                return SILENT_RINGTONE;
+            } else {
+                return getCanonicalRingtoneValue(value);
+            }
+        }
+        // Return the original value
+        return value;
+    }
+
+    /**
+     * Sets the ringtone of type specified by the name.
+     *
+     * @param name should be Settings.System.RINGTONE or Settings.System.NOTIFICATION_SOUND.
+     * @param value can be a canonicalized uri or "_silent" to indicate a silent (null) ringtone.
+     */
+    private void setRingtone(String name, String value) {
+        // If it's null, don't change the default
+        if (value == null) return;
+        Uri ringtoneUri = null;
+        if (SILENT_RINGTONE.equals(value)) {
+            ringtoneUri = null;
+        } else {
+            Uri canonicalUri = Uri.parse(value);
+            ringtoneUri = mContext.getContentResolver().uncanonicalize(canonicalUri);
+            if (ringtoneUri == null) {
+                // Unrecognized or invalid Uri, don't restore
+                return;
+            }
+        }
+        final int ringtoneType = Settings.System.RINGTONE.equals(name)
+                ? RingtoneManager.TYPE_RINGTONE : RingtoneManager.TYPE_NOTIFICATION;
+        RingtoneManager.setActualDefaultRingtoneUri(mContext, ringtoneType, ringtoneUri);
+    }
+
+    private String getCanonicalRingtoneValue(String value) {
+        final Uri ringtoneUri = Uri.parse(value);
+        final Uri canonicalUri = mContext.getContentResolver().canonicalize(ringtoneUri);
+        return canonicalUri == null ? null : canonicalUri.toString();
     }
 
     private boolean isAlreadyConfiguredCriticalAccessibilitySetting(String name) {
@@ -137,33 +190,34 @@ public class SettingsHelper {
         String localeString = loc.getLanguage();
         String country = loc.getCountry();
         if (!TextUtils.isEmpty(country)) {
-            localeString += "_" + country;
+            localeString += "-" + country;
         }
         return localeString.getBytes();
     }
 
     /**
-     * Sets the locale specified. Input data is the equivalent of "ll_cc".getBytes(), where
-     * "ll" is the language code and "cc" is the country code.
+     * Sets the locale specified. Input data is the byte representation of a
+     * BCP-47 language tag. For backwards compatibility, strings of the form
+     * {@code ll_CC} are also accepted, where {@code ll} is a two letter language
+     * code and {@code CC} is a two letter country code.
+     *
      * @param data the locale string in bytes.
      */
     void setLocaleData(byte[] data, int size) {
         // Check if locale was set by the user:
         Configuration conf = mContext.getResources().getConfiguration();
-        Locale loc = conf.locale;
         // TODO: The following is not working as intended because the network is forcing a locale
         // change after registering. Need to find some other way to detect if the user manually
         // changed the locale
         if (conf.userSetLocale) return; // Don't change if user set it in the SetupWizard
 
         final String[] availableLocales = mContext.getAssets().getLocales();
-        String localeCode = new String(data, 0, size);
-        String language = new String(data, 0, 2);
-        String country = size > 4 ? new String(data, 3, 2) : "";
-        loc = null;
+        // Replace "_" with "-" to deal with older backups.
+        String localeCode = new String(data, 0, size).replace('_', '-');
+        Locale loc = null;
         for (int i = 0; i < availableLocales.length; i++) {
             if (availableLocales[i].equals(localeCode)) {
-                loc = new Locale(language, country);
+                loc = Locale.forLanguageTag(localeCode);
                 break;
             }
         }

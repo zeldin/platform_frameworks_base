@@ -4,23 +4,15 @@ include $(CLEAR_VARS)
 
 # Build the unit tests.
 test_src_files := \
-    InputChannel_test.cpp \
-    InputEvent_test.cpp \
-    InputPublisherAndConsumer_test.cpp \
-    ObbFile_test.cpp
+    ObbFile_test.cpp \
+    ZipUtils_test.cpp \
+    ResourceTypes_test.cpp
 
 shared_libraries := \
     libandroidfw \
     libcutils \
     libutils \
-    libbinder \
     libui \
-    libstlport \
-    libskia
-
-static_libraries := \
-    libgtest \
-    libgtest_main
 
 $(foreach file,$(test_src_files), \
     $(eval include $(CLEAR_VARS)) \

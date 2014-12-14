@@ -104,17 +104,16 @@ private:
         if (mY > mMaxY) mY = mMaxY;
     }
 
-    virtual void fade(Transition transition) {
+    virtual void fade(Transition) {
     }
 
-    virtual void unfade(Transition transition) {
+    virtual void unfade(Transition) {
     }
 
-    virtual void setPresentation(Presentation presentation) {
+    virtual void setPresentation(Presentation) {
     }
 
-    virtual void setSpots(const PointerCoords* spotCoords,
-            const uint32_t* spotIdToIndex, BitSet32 spotIdBits) {
+    virtual void setSpots(const PointerCoords*, const uint32_t*, BitSet32) {
     }
 
     virtual void clearSpots() {
@@ -186,11 +185,11 @@ private:
         mInputDevices = inputDevices;
     }
 
-    virtual sp<KeyCharacterMap> getKeyboardLayoutOverlay(const String8& inputDeviceDescriptor) {
+    virtual sp<KeyCharacterMap> getKeyboardLayoutOverlay(const String8&) {
         return NULL;
     }
 
-    virtual String8 getDeviceAlias(const InputDeviceIdentifier& identifier) {
+    virtual String8 getDeviceAlias(const InputDeviceIdentifier&) {
         return String8::empty();
     }
 };
@@ -472,6 +471,10 @@ private:
         return device ? device->identifier : InputDeviceIdentifier();
     }
 
+    virtual int32_t getDeviceControllerNumber(int32_t) const {
+        return 0;
+    }
+
     virtual void getConfiguration(int32_t deviceId, PropertyMap* outConfiguration) const {
         Device* device = getDevice(deviceId);
         if (device) {
@@ -501,7 +504,7 @@ private:
         return false;
     }
 
-    virtual bool hasInputProperty(int32_t deviceId, int property) const {
+    virtual bool hasInputProperty(int32_t, int) const {
         return false;
     }
 
@@ -539,8 +542,7 @@ private:
         return NULL;
     }
 
-    virtual status_t mapAxis(int32_t deviceId, int32_t scanCode,
-            AxisInfo* outAxisInfo) const {
+    virtual status_t mapAxis(int32_t, int32_t, AxisInfo*) const {
         return NAME_NOT_FOUND;
     }
 
@@ -548,7 +550,7 @@ private:
         mExcludedDevices = devices;
     }
 
-    virtual size_t getEvents(int timeoutMillis, RawEvent* buffer, size_t bufferSize) {
+    virtual size_t getEvents(int, RawEvent* buffer, size_t) {
         if (mEvents.empty()) {
             return 0;
         }
@@ -666,25 +668,25 @@ private:
         }
     }
 
-    virtual sp<KeyCharacterMap> getKeyCharacterMap(int32_t deviceId) const {
+    virtual sp<KeyCharacterMap> getKeyCharacterMap(int32_t) const {
         return NULL;
     }
 
-    virtual bool setKeyboardLayoutOverlay(int32_t deviceId, const sp<KeyCharacterMap>& map) {
+    virtual bool setKeyboardLayoutOverlay(int32_t, const sp<KeyCharacterMap>&) {
         return false;
     }
 
-    virtual void vibrate(int32_t deviceId, nsecs_t duration) {
+    virtual void vibrate(int32_t, nsecs_t) {
     }
 
-    virtual void cancelVibrate(int32_t deviceId) {
+    virtual void cancelVibrate(int32_t) {
     }
 
-    virtual bool isExternal(int32_t deviceId) const {
+    virtual bool isExternal(int32_t) const {
         return false;
     }
 
-    virtual void dump(String8& dump) {
+    virtual void dump(String8&) {
     }
 
     virtual void monitor() {
@@ -749,18 +751,17 @@ private:
         return mListener.get();
     }
 
-    virtual void disableVirtualKeysUntil(nsecs_t time) {
+    virtual void disableVirtualKeysUntil(nsecs_t) {
     }
 
-    virtual bool shouldDropVirtualKey(nsecs_t now,
-            InputDevice* device, int32_t keyCode, int32_t scanCode) {
+    virtual bool shouldDropVirtualKey(nsecs_t, InputDevice*, int32_t, int32_t) {
         return false;
     }
 
     virtual void fadePointer() {
     }
 
-    virtual void requestTimeoutAtTime(nsecs_t when) {
+    virtual void requestTimeoutAtTime(nsecs_t) {
     }
 
     virtual int32_t bumpGeneration() {
@@ -853,12 +854,11 @@ private:
         }
     }
 
-    virtual void configure(nsecs_t when,
-            const InputReaderConfiguration* config, uint32_t changes) {
+    virtual void configure(nsecs_t, const InputReaderConfiguration*, uint32_t) {
         mConfigureWasCalled = true;
     }
 
-    virtual void reset(nsecs_t when) {
+    virtual void reset(nsecs_t) {
         mResetWasCalled = true;
     }
 
@@ -867,22 +867,22 @@ private:
         mProcessWasCalled = true;
     }
 
-    virtual int32_t getKeyCodeState(uint32_t sourceMask, int32_t keyCode) {
+    virtual int32_t getKeyCodeState(uint32_t, int32_t keyCode) {
         ssize_t index = mKeyCodeStates.indexOfKey(keyCode);
         return index >= 0 ? mKeyCodeStates.valueAt(index) : AKEY_STATE_UNKNOWN;
     }
 
-    virtual int32_t getScanCodeState(uint32_t sourceMask, int32_t scanCode) {
+    virtual int32_t getScanCodeState(uint32_t, int32_t scanCode) {
         ssize_t index = mScanCodeStates.indexOfKey(scanCode);
         return index >= 0 ? mScanCodeStates.valueAt(index) : AKEY_STATE_UNKNOWN;
     }
 
-    virtual int32_t getSwitchState(uint32_t sourceMask, int32_t switchCode) {
+    virtual int32_t getSwitchState(uint32_t, int32_t switchCode) {
         ssize_t index = mSwitchStates.indexOfKey(switchCode);
         return index >= 0 ? mSwitchStates.valueAt(index) : AKEY_STATE_UNKNOWN;
     }
 
-    virtual bool markSupportedKeyCodes(uint32_t sourceMask, size_t numCodes,
+    virtual bool markSupportedKeyCodes(uint32_t, size_t numCodes,
             const int32_t* keyCodes, uint8_t* outFlags) {
         bool result = false;
         for (size_t i = 0; i < numCodes; i++) {
@@ -928,22 +928,24 @@ public:
         mNextDevice = device;
     }
 
-    InputDevice* newDevice(int32_t deviceId, const String8& name, uint32_t classes) {
+    InputDevice* newDevice(int32_t deviceId, int32_t controllerNumber, const String8& name,
+            uint32_t classes) {
         InputDeviceIdentifier identifier;
         identifier.name = name;
         int32_t generation = deviceId + 1;
-        return new InputDevice(&mContext, deviceId, generation, identifier, classes);
+        return new InputDevice(&mContext, deviceId, generation, controllerNumber, identifier,
+                classes);
     }
 
 protected:
-    virtual InputDevice* createDeviceLocked(int32_t deviceId,
+    virtual InputDevice* createDeviceLocked(int32_t deviceId, int32_t controllerNumber,
             const InputDeviceIdentifier& identifier, uint32_t classes) {
         if (mNextDevice) {
             InputDevice* device = mNextDevice;
             mNextDevice = NULL;
             return device;
         }
-        return InputReader::createDeviceLocked(deviceId, identifier, classes);
+        return InputReader::createDeviceLocked(deviceId, controllerNumber, identifier, classes);
     }
 
     friend class InputReaderTest;
@@ -988,10 +990,10 @@ protected:
         mFakeEventHub->assertQueueIsEmpty();
     }
 
-    FakeInputMapper* addDeviceWithFakeInputMapper(int32_t deviceId,
+    FakeInputMapper* addDeviceWithFakeInputMapper(int32_t deviceId, int32_t controllerNumber,
             const String8& name, uint32_t classes, uint32_t sources,
             const PropertyMap* configuration) {
-        InputDevice* device = mReader->newDevice(deviceId, name, classes);
+        InputDevice* device = mReader->newDevice(deviceId, controllerNumber, name, classes);
         FakeInputMapper* mapper = new FakeInputMapper(device, sources);
         device->addMapper(mapper);
         mReader->setNextDevice(device);
@@ -1028,7 +1030,7 @@ TEST_F(InputReaderTest, GetInputDevices) {
 
 TEST_F(InputReaderTest, GetKeyCodeState_ForwardsRequestsToMappers) {
     FakeInputMapper* mapper = NULL;
-    ASSERT_NO_FATAL_FAILURE(mapper = addDeviceWithFakeInputMapper(1, String8("fake"),
+    ASSERT_NO_FATAL_FAILURE(mapper = addDeviceWithFakeInputMapper(1, 0, String8("fake"),
             INPUT_DEVICE_CLASS_KEYBOARD, AINPUT_SOURCE_KEYBOARD, NULL));
     mapper->setKeyCodeState(AKEYCODE_A, AKEY_STATE_DOWN);
 
@@ -1055,7 +1057,7 @@ TEST_F(InputReaderTest, GetKeyCodeState_ForwardsRequestsToMappers) {
 
 TEST_F(InputReaderTest, GetScanCodeState_ForwardsRequestsToMappers) {
     FakeInputMapper* mapper = NULL;
-    ASSERT_NO_FATAL_FAILURE(mapper = addDeviceWithFakeInputMapper(1, String8("fake"),
+    ASSERT_NO_FATAL_FAILURE(mapper = addDeviceWithFakeInputMapper(1, 0, String8("fake"),
             INPUT_DEVICE_CLASS_KEYBOARD, AINPUT_SOURCE_KEYBOARD, NULL));
     mapper->setScanCodeState(KEY_A, AKEY_STATE_DOWN);
 
@@ -1082,7 +1084,7 @@ TEST_F(InputReaderTest, GetScanCodeState_ForwardsRequestsToMappers) {
 
 TEST_F(InputReaderTest, GetSwitchState_ForwardsRequestsToMappers) {
     FakeInputMapper* mapper = NULL;
-    ASSERT_NO_FATAL_FAILURE(mapper = addDeviceWithFakeInputMapper(1, String8("fake"),
+    ASSERT_NO_FATAL_FAILURE(mapper = addDeviceWithFakeInputMapper(1, 0, String8("fake"),
             INPUT_DEVICE_CLASS_KEYBOARD, AINPUT_SOURCE_KEYBOARD, NULL));
     mapper->setSwitchState(SW_LID, AKEY_STATE_DOWN);
 
@@ -1109,7 +1111,7 @@ TEST_F(InputReaderTest, GetSwitchState_ForwardsRequestsToMappers) {
 
 TEST_F(InputReaderTest, MarkSupportedKeyCodes_ForwardsRequestsToMappers) {
     FakeInputMapper* mapper = NULL;
-    ASSERT_NO_FATAL_FAILURE(mapper = addDeviceWithFakeInputMapper(1, String8("fake"),
+    ASSERT_NO_FATAL_FAILURE(mapper = addDeviceWithFakeInputMapper(1, 0, String8("fake"),
             INPUT_DEVICE_CLASS_KEYBOARD, AINPUT_SOURCE_KEYBOARD, NULL));
     mapper->addSupportedKeyCode(AKEYCODE_A);
     mapper->addSupportedKeyCode(AKEYCODE_B);
@@ -1153,7 +1155,7 @@ TEST_F(InputReaderTest, LoopOnce_WhenDeviceScanFinished_SendsConfigurationChange
 
 TEST_F(InputReaderTest, LoopOnce_ForwardsRawEventsToMappers) {
     FakeInputMapper* mapper = NULL;
-    ASSERT_NO_FATAL_FAILURE(mapper = addDeviceWithFakeInputMapper(1, String8("fake"),
+    ASSERT_NO_FATAL_FAILURE(mapper = addDeviceWithFakeInputMapper(1, 0, String8("fake"),
             INPUT_DEVICE_CLASS_KEYBOARD, AINPUT_SOURCE_KEYBOARD, NULL));
 
     mFakeEventHub->enqueueEvent(0, 1, EV_KEY, KEY_A, 1);
@@ -1177,6 +1179,7 @@ protected:
     static const char* DEVICE_NAME;
     static const int32_t DEVICE_ID;
     static const int32_t DEVICE_GENERATION;
+    static const int32_t DEVICE_CONTROLLER_NUMBER;
     static const uint32_t DEVICE_CLASSES;
 
     sp<FakeEventHub> mFakeEventHub;
@@ -1196,7 +1199,7 @@ protected:
         InputDeviceIdentifier identifier;
         identifier.name = DEVICE_NAME;
         mDevice = new InputDevice(mFakeContext, DEVICE_ID, DEVICE_GENERATION,
-                identifier, DEVICE_CLASSES);
+                DEVICE_CONTROLLER_NUMBER, identifier, DEVICE_CLASSES);
     }
 
     virtual void TearDown() {
@@ -1212,6 +1215,7 @@ protected:
 const char* InputDeviceTest::DEVICE_NAME = "device";
 const int32_t InputDeviceTest::DEVICE_ID = 1;
 const int32_t InputDeviceTest::DEVICE_GENERATION = 2;
+const int32_t InputDeviceTest::DEVICE_CONTROLLER_NUMBER = 0;
 const uint32_t InputDeviceTest::DEVICE_CLASSES = INPUT_DEVICE_CLASS_KEYBOARD
         | INPUT_DEVICE_CLASS_TOUCH | INPUT_DEVICE_CLASS_JOYSTICK;
 
@@ -1365,6 +1369,7 @@ protected:
     static const char* DEVICE_NAME;
     static const int32_t DEVICE_ID;
     static const int32_t DEVICE_GENERATION;
+    static const int32_t DEVICE_CONTROLLER_NUMBER;
     static const uint32_t DEVICE_CLASSES;
 
     sp<FakeEventHub> mFakeEventHub;
@@ -1381,7 +1386,7 @@ protected:
         InputDeviceIdentifier identifier;
         identifier.name = DEVICE_NAME;
         mDevice = new InputDevice(mFakeContext, DEVICE_ID, DEVICE_GENERATION,
-                identifier, DEVICE_CLASSES);
+                DEVICE_CONTROLLER_NUMBER, identifier, DEVICE_CLASSES);
 
         mFakeEventHub->addDevice(DEVICE_ID, String8(DEVICE_NAME), 0);
     }
@@ -1461,6 +1466,7 @@ protected:
 const char* InputMapperTest::DEVICE_NAME = "device";
 const int32_t InputMapperTest::DEVICE_ID = 1;
 const int32_t InputMapperTest::DEVICE_GENERATION = 2;
+const int32_t InputMapperTest::DEVICE_CONTROLLER_NUMBER = 0;
 const uint32_t InputMapperTest::DEVICE_CLASSES = 0; // not needed for current tests
 
 
@@ -1516,7 +1522,7 @@ protected:
 };
 
 void KeyboardInputMapperTest::testDPadKeyRotation(KeyboardInputMapper* mapper,
-        int32_t originalScanCode, int32_t originalKeyCode, int32_t rotatedKeyCode) {
+        int32_t originalScanCode, int32_t, int32_t rotatedKeyCode) {
     NotifyKeyArgs args;
 
     process(mapper, ARBITRARY_TIME, DEVICE_ID, EV_KEY, originalScanCode, 1);

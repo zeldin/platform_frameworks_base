@@ -26,13 +26,13 @@
 #include <limits.h>
 
 #include <android_runtime/AndroidRuntime.h>
+#include <android_runtime/Log.h>
 #include <utils/Timers.h>
 #include <utils/misc.h>
 #include <utils/String8.h>
 #include <utils/Log.h>
 #include <hardware/power.h>
 #include <hardware_legacy/power.h>
-#include <cutils/android_reboot.h>
 #include <suspend/autosuspend.h>
 
 #include "com_android_server_power_PowerManagerService.h"
@@ -150,24 +150,24 @@ static void nativeInit(JNIEnv* env, jobject obj) {
     }
 }
 
-static void nativeSetPowerState(JNIEnv* env,
-        jclass clazz, jboolean screenOn, jboolean screenBright) {
+static void nativeSetPowerState(JNIEnv* /* env */,
+        jclass /* clazz */, jboolean screenOn, jboolean screenBright) {
     AutoMutex _l(gPowerManagerLock);
     gScreenOn = screenOn;
     gScreenBright = screenBright;
 }
 
-static void nativeAcquireSuspendBlocker(JNIEnv *env, jclass clazz, jstring nameStr) {
+static void nativeAcquireSuspendBlocker(JNIEnv *env, jclass /* clazz */, jstring nameStr) {
     ScopedUtfChars name(env, nameStr);
     acquire_wake_lock(PARTIAL_WAKE_LOCK, name.c_str());
 }
 
-static void nativeReleaseSuspendBlocker(JNIEnv *env, jclass clazz, jstring nameStr) {
+static void nativeReleaseSuspendBlocker(JNIEnv *env, jclass /* clazz */, jstring nameStr) {
     ScopedUtfChars name(env, nameStr);
     release_wake_lock(name.c_str());
 }
 
-static void nativeSetInteractive(JNIEnv *env, jclass clazz, jboolean enable) {
+static void nativeSetInteractive(JNIEnv* /* env */, jclass /* clazz */, jboolean enable) {
     if (gPowerModule) {
         if (enable) {
             ALOGD_IF_SLOW(20, "Excessive delay in setInteractive(true) while turning screen on");
@@ -179,7 +179,7 @@ static void nativeSetInteractive(JNIEnv *env, jclass clazz, jboolean enable) {
     }
 }
 
-static void nativeSetAutoSuspend(JNIEnv *env, jclass clazz, jboolean enable) {
+static void nativeSetAutoSuspend(JNIEnv* /* env */, jclass /* clazz */, jboolean enable) {
     if (enable) {
         ALOGD_IF_SLOW(100, "Excessive delay in autosuspend_enable() while turning screen off");
         autosuspend_enable();
@@ -188,22 +188,6 @@ static void nativeSetAutoSuspend(JNIEnv *env, jclass clazz, jboolean enable) {
         autosuspend_disable();
     }
 }
-
-static void nativeShutdown(JNIEnv *env, jclass clazz) {
-    android_reboot(ANDROID_RB_POWEROFF, 0, 0);
-}
-
-static void nativeReboot(JNIEnv *env, jclass clazz, jstring reason) {
-    if (reason == NULL) {
-        android_reboot(ANDROID_RB_RESTART, 0, 0);
-    } else {
-        const char *chars = env->GetStringUTFChars(reason, NULL);
-        android_reboot(ANDROID_RB_RESTART2, 0, (char *) chars);
-        env->ReleaseStringUTFChars(reason, chars);  // In case it fails.
-    }
-    jniThrowIOException(env, errno);
-}
-
 
 // ----------------------------------------------------------------------------
 
@@ -221,10 +205,6 @@ static JNINativeMethod gPowerManagerServiceMethods[] = {
             (void*) nativeSetInteractive },
     { "nativeSetAutoSuspend", "(Z)V",
             (void*) nativeSetAutoSuspend },
-    { "nativeShutdown", "()V",
-            (void*) nativeShutdown },
-    { "nativeReboot", "(Ljava/lang/String;)V",
-            (void*) nativeReboot },
 };
 
 #define FIND_CLASS(var, className) \

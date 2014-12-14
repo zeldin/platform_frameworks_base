@@ -73,12 +73,14 @@
 
 
 
+
+
 <html>
 <head>
 
 
-
-<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+<meta name="viewport" content="width=device-width" />
 
 <link rel="shortcut icon" type="image/x-icon" href="/favicon.ico" />
 <title>ItemScope | Android Developers</title>
@@ -95,6 +97,7 @@ href="//fonts.googleapis.com/css?family=Roboto:regular,medium,thin,italic,medium
 <script src="/assets/js/android_3p-bundle.js" type="text/javascript"></script>
 <script type="text/javascript">
   var toRoot = "/";
+  var metaTags = [];
   var devsite = false;
 </script>
 <script src="/assets/js/docs.js" type="text/javascript"></script>
@@ -239,6 +242,8 @@ onkeyup="return search_changed(event, false, '/')" />
       </div>
       <div class="child-card training no-display">
       </div>
+      <div class="child-card samples no-display">
+      </div>
     </div>
     <div class="suggest-card design no-display">
       <ul class="search_filtered">
@@ -277,7 +282,7 @@ onkeyup="return search_changed(event, false, '/')" />
                           ja-lang="トレーニング"
                           es-lang="Capacitación"               
                           >Training</a></li>
-                        <li><a href="/guide/components/index.html"
+                        <li><a href="/guide/index.html"
                           zh-tw-lang="API 指南"
                           zh-cn-lang="API 指南"
                           ru-lang="Руководства по API"
@@ -305,6 +310,10 @@ onkeyup="return search_changed(event, false, '/')" />
                         </li>
                         <li><a href="/google/index.html">Google Services</a>
                         </li>
+                        
+                          <li><a href="/samples/index.html">Samples</a>
+                          </li>
+                        
                       </ul>
                     </li>
                     <li class="distribute last">
@@ -344,7 +353,7 @@ onkeyup="return search_changed(event, false, '/')" />
                   ja-lang="トレーニング"
                   es-lang="Capacitación"               
                   >Training</a></li>
-                <li class="guide"><a href="/guide/components/index.html"
+                <li class="guide"><a href="/guide/index.html"
                   zh-tw-lang="API 指南"
                   zh-cn-lang="API 指南"
                   ru-lang="Руководства по API"
@@ -371,6 +380,11 @@ onkeyup="return search_changed(event, false, '/')" />
                 <li class="google"><a href="/google/index.html"
                   >Google Services</a>
                 </li>
+                
+                  <li class="samples"><a href="/samples/index.html"
+                    >Samples</a>
+                  </li>
+                
             </ul>
         </div>
         
@@ -417,15 +431,34 @@ onkeyup="return search_changed(event, false, '/')" />
   </li>
   <li class="nav-section">
     <div class="nav-section-header empty"><a href="/google/play-services/maps.html">
-          <span class="en">Google Maps</span>
+          <span class="en">Maps</span>
       </a></div>
   </li>
   <li class="nav-section">
-    <div class="nav-section-header empty"><a href="/google/play-services/auth.html">
-          <span class="en">Authorization</span>
+    <div class="nav-section-header empty"><a href="/google/play-services/drive.html">
+          <span class="en">Drive</span>
       </a></div>
   </li>
-
+  <li class="nav-section">
+    <div class="nav-section-header empty"><a href="/google/play-services/cast.html">
+          <span class="en">Cast</span>
+      </a></div>
+  </li>
+  <li class="nav-section">
+    <div class="nav-section-header"><a href="/google/play-services/ads.html">
+      <span class="en">Ads</span></a>
+    </div>
+    <ul>
+      <li><a href="/google/play-services/id.html">
+          <span class="en">Advertising ID</span></a>
+      </li>
+    </ul>
+  </li>
+  <li class="nav-section">
+    <div class="nav-section-header empty"><a href="/google/play-services/wallet.html">
+          <span class="en">Wallet</span>
+      </a></div>
+  </li>
 
 
   <li class="nav-section">
@@ -435,6 +468,18 @@ onkeyup="return search_changed(event, false, '/')" />
     <ul>
       <li><a href="/google/play-services/setup.html">
           <span class="en">Setup</span></a>
+      </li>
+      <li class="nav-section">
+        <div class="nav-section-header"><a href="/google/auth/api-client.html">
+          <span class="en">Accessing Google Play Services APIs</span></a>
+        </div>
+        <ul>
+          <li>
+            <a href="/google/auth/http-auth.html">
+              <span class="en">Authorizing with Google for REST APIs</span>
+            </a>
+          </li>
+        </ul>
       </li>
       <li id="gms-tree-list" class="nav-section">
         <div class="nav-section-header">
@@ -498,28 +543,31 @@ onkeyup="return search_changed(event, false, '/')" />
 
 
 
-  <li class="nav-section">
+   <li class="nav-section">
       <div class="nav-section-header"><a href="/google/gcm/index.html">
         <span class="en">Google Cloud Messaging</span></a>
       </div>
       <ul>
+        <li><a href="/google/gcm/gcm.html">
+            <span class="en">Overview</span></a>
+        </li>
         <li><a href="/google/gcm/gs.html">
             <span class="en">Getting Started</span></a>
         </li>
-        <li><a href="/google/gcm/gcm.html">
-            <span class="en">Architectural Overview</span></a>
+        <li><a href="/google/gcm/client.html">
+            <span class="en">Implementing GCM Client</span></a>
         </li>
-         <li><a href="/google/gcm/ccs.html">
-              <span class="en">Cloud Connection Server</span></a>
+        <li class="nav-section"><div class="nav-section-header"><a href="/google/gcm/server.html">
+              <span class="en">Implementing GCM Server</span></a></div>
+              <ul>
+              <li><a href="/google/gcm/ccs.html">
+              <span class="en">CCS (XMPP)</span></a></li>
+              <li><a href="/google/gcm/http.html">
+              <span class="en">HTTP</span></a></li>
+              </ul>
         </li>
         <li><a href="/google/gcm/notifications.html">
               <span class="en">User Notifications</span></a>
-        </li>
-        <li><a href="/google/gcm/client.html">
-            <span class="en">GCM Client</span></a>
-        </li>
-        <li><a href="/google/gcm/server.html">
-            <span class="en">GCM Server</span></a>
         </li>
         <li><a href="/google/gcm/adv.html">
             <span class="en">Advanced Topics</span></a>
@@ -985,7 +1033,7 @@ Summary:
         <td class="jd-linkcol" width="100%"><nobr>
         <span class="sympad"><a href="/reference/com/google/android/gms/plus/model/moments/ItemScope.html#getAuthor()">getAuthor</a></span>()</nobr>
         
-        <div class="jd-descrdiv">The person who created this scope.</div>
+        <div class="jd-descrdiv">The person or persons who created this result.</div>
   
   </td></tr>
 
@@ -1003,7 +1051,7 @@ Summary:
         <td class="jd-linkcol" width="100%"><nobr>
         <span class="sympad"><a href="/reference/com/google/android/gms/plus/model/moments/ItemScope.html#getBestRating()">getBestRating</a></span>()</nobr>
         
-        <div class="jd-descrdiv">Best possible rating value.</div>
+        <div class="jd-descrdiv">Best possible rating value that a result might obtain.</div>
   
   </td></tr>
 
@@ -1111,7 +1159,7 @@ Summary:
         <td class="jd-linkcol" width="100%"><nobr>
         <span class="sympad"><a href="/reference/com/google/android/gms/plus/model/moments/ItemScope.html#getContributor()">getContributor</a></span>()</nobr>
         
-        <div class="jd-descrdiv">The list of contributors for this scope.</div>
+        <div class="jd-descrdiv">A list of contributors to this result.</div>
   
   </td></tr>
 
@@ -1129,7 +1177,7 @@ Summary:
         <td class="jd-linkcol" width="100%"><nobr>
         <span class="sympad"><a href="/reference/com/google/android/gms/plus/model/moments/ItemScope.html#getDateCreated()">getDateCreated</a></span>()</nobr>
         
-        <div class="jd-descrdiv">The date this scope was created.</div>
+        <div class="jd-descrdiv">The date the result was created such as the date that a review was first created.</div>
   
   </td></tr>
 
@@ -1147,7 +1195,7 @@ Summary:
         <td class="jd-linkcol" width="100%"><nobr>
         <span class="sympad"><a href="/reference/com/google/android/gms/plus/model/moments/ItemScope.html#getDateModified()">getDateModified</a></span>()</nobr>
         
-        <div class="jd-descrdiv">The date this scope was last modified.</div>
+        <div class="jd-descrdiv">The date the result was last modified such as the date that a review was last edited.</div>
   
   </td></tr>
 
@@ -1165,7 +1213,7 @@ Summary:
         <td class="jd-linkcol" width="100%"><nobr>
         <span class="sympad"><a href="/reference/com/google/android/gms/plus/model/moments/ItemScope.html#getDatePublished()">getDatePublished</a></span>()</nobr>
         
-        <div class="jd-descrdiv">The initial date this scope was published.</div>
+        <div class="jd-descrdiv">The initial date that the result was published.</div>
   
   </td></tr>
 
@@ -1183,7 +1231,7 @@ Summary:
         <td class="jd-linkcol" width="100%"><nobr>
         <span class="sympad"><a href="/reference/com/google/android/gms/plus/model/moments/ItemScope.html#getDescription()">getDescription</a></span>()</nobr>
         
-        <div class="jd-descrdiv">The string describing the content of this scope.</div>
+        <div class="jd-descrdiv">The string that describes the content of the result.</div>
   
   </td></tr>
 
@@ -1345,7 +1393,7 @@ Summary:
         <td class="jd-linkcol" width="100%"><nobr>
         <span class="sympad"><a href="/reference/com/google/android/gms/plus/model/moments/ItemScope.html#getId()">getId</a></span>()</nobr>
         
-        <div class="jd-descrdiv">The id for this item scope.</div>
+        <div class="jd-descrdiv">An identifier for the target.</div>
   
   </td></tr>
 
@@ -1363,7 +1411,7 @@ Summary:
         <td class="jd-linkcol" width="100%"><nobr>
         <span class="sympad"><a href="/reference/com/google/android/gms/plus/model/moments/ItemScope.html#getImage()">getImage</a></span>()</nobr>
         
-        <div class="jd-descrdiv">A url to the image for this scope.</div>
+        <div class="jd-descrdiv">A URL to the image that represents this result.</div>
   
   </td></tr>
 
@@ -1453,7 +1501,7 @@ Summary:
         <td class="jd-linkcol" width="100%"><nobr>
         <span class="sympad"><a href="/reference/com/google/android/gms/plus/model/moments/ItemScope.html#getName()">getName</a></span>()</nobr>
         
-        <div class="jd-descrdiv">The name of this scope.</div>
+        <div class="jd-descrdiv">The name of the result.</div>
   
   </td></tr>
 
@@ -1507,7 +1555,7 @@ Summary:
         <td class="jd-linkcol" width="100%"><nobr>
         <span class="sympad"><a href="/reference/com/google/android/gms/plus/model/moments/ItemScope.html#getPlayerType()">getPlayerType</a></span>()</nobr>
         
-        <div class="jd-descrdiv">Player type required-for example, Flash or Silverlight.</div>
+        <div class="jd-descrdiv">Player type that is required.</div>
   
   </td></tr>
 
@@ -1633,7 +1681,7 @@ Summary:
         <td class="jd-linkcol" width="100%"><nobr>
         <span class="sympad"><a href="/reference/com/google/android/gms/plus/model/moments/ItemScope.html#getText()">getText</a></span>()</nobr>
         
-        <div class="jd-descrdiv">Comment text, review text, etc.</div>
+        <div class="jd-descrdiv">The text that is the result of the app activity.</div>
   
   </td></tr>
 
@@ -1669,7 +1717,7 @@ Summary:
         <td class="jd-linkcol" width="100%"><nobr>
         <span class="sympad"><a href="/reference/com/google/android/gms/plus/model/moments/ItemScope.html#getThumbnailUrl()">getThumbnailUrl</a></span>()</nobr>
         
-        <div class="jd-descrdiv">A url to a thumbnail image for this scope.</div>
+        <div class="jd-descrdiv">A URL to a thumbnail image that represents this result.</div>
   
   </td></tr>
 
@@ -1705,7 +1753,7 @@ Summary:
         <td class="jd-linkcol" width="100%"><nobr>
         <span class="sympad"><a href="/reference/com/google/android/gms/plus/model/moments/ItemScope.html#getType()">getType</a></span>()</nobr>
         
-        <div class="jd-descrdiv">The item type.</div>
+        <div class="jd-descrdiv">The schema.org URL that best describes the referenced target and matches the type of moment.</div>
   
   </td></tr>
 
@@ -1723,7 +1771,7 @@ Summary:
         <td class="jd-linkcol" width="100%"><nobr>
         <span class="sympad"><a href="/reference/com/google/android/gms/plus/model/moments/ItemScope.html#getUrl()">getUrl</a></span>()</nobr>
         
-        <div class="jd-descrdiv">A URL for the item upon which the action was performed.</div>
+        <div class="jd-descrdiv">The URL that points to the result object.</div>
   
   </td></tr>
 
@@ -1759,7 +1807,7 @@ Summary:
         <td class="jd-linkcol" width="100%"><nobr>
         <span class="sympad"><a href="/reference/com/google/android/gms/plus/model/moments/ItemScope.html#getWorstRating()">getWorstRating</a></span>()</nobr>
         
-        <div class="jd-descrdiv">Worst possible rating value.</div>
+        <div class="jd-descrdiv">Worst possible rating value that a result might obtain.</div>
   
   </td></tr>
 
@@ -2788,6 +2836,24 @@ From interface
   </td></tr>
 
 
+	 
+    <tr class=" api apilevel-" >
+        <td class="jd-typecol"><nobr>
+            abstract
+            
+            
+            
+            
+            boolean</nobr>
+        </td>
+        <td class="jd-linkcol" width="100%"><nobr>
+        <span class="sympad"><a href="/reference/com/google/android/gms/common/data/Freezable.html#isDataValid()">isDataValid</a></span>()</nobr>
+        
+        <div class="jd-descrdiv">Check to see if this object is valid for use.</div>
+  
+  </td></tr>
+
+
 </table>
   </div>
 </div>
@@ -3159,7 +3225,8 @@ From interface
       </div>
     <div class="jd-details-descr">
       
-  <div class="jd-tagdata jd-tagdescr"><p>The person who created this scope.
+  <div class="jd-tagdata jd-tagdescr"><p>The person or persons who created this result. In the example of restaurant reviews, this
+ might be the reviewer's name.
 </p></div>
 
     </div>
@@ -3189,7 +3256,9 @@ From interface
       </div>
     <div class="jd-details-descr">
       
-  <div class="jd-tagdata jd-tagdescr"><p>Best possible rating value.
+  <div class="jd-tagdata jd-tagdescr"><p>Best possible rating value that a result might obtain. This property defines the upper bound
+ for the ratingValue. For example, you might have a 5 star rating scale, you would provide 5
+ as the value for this property.
 </p></div>
 
     </div>
@@ -3369,7 +3438,7 @@ From interface
       </div>
     <div class="jd-details-descr">
       
-  <div class="jd-tagdata jd-tagdescr"><p>The list of contributors for this scope.
+  <div class="jd-tagdata jd-tagdescr"><p>A list of contributors to this result.
 </p></div>
 
     </div>
@@ -3399,7 +3468,7 @@ From interface
       </div>
     <div class="jd-details-descr">
       
-  <div class="jd-tagdata jd-tagdescr"><p>The date this scope was created.
+  <div class="jd-tagdata jd-tagdescr"><p>The date the result was created such as the date that a review was first created.
 </p></div>
 
     </div>
@@ -3429,7 +3498,7 @@ From interface
       </div>
     <div class="jd-details-descr">
       
-  <div class="jd-tagdata jd-tagdescr"><p>The date this scope was last modified.
+  <div class="jd-tagdata jd-tagdescr"><p>The date the result was last modified such as the date that a review was last edited.
 </p></div>
 
     </div>
@@ -3459,7 +3528,10 @@ From interface
       </div>
     <div class="jd-details-descr">
       
-  <div class="jd-tagdata jd-tagdescr"><p>The initial date this scope was published.
+  <div class="jd-tagdata jd-tagdescr"><p>The initial date that the result was published. For example, a user writes a comment on a
+ blog, which has a result.dateCreated of when they submit it. If the blog users comment
+ moderation, the result.datePublished value would match the date when the owner approved the
+ message.
 </p></div>
 
     </div>
@@ -3489,7 +3561,7 @@ From interface
       </div>
     <div class="jd-details-descr">
       
-  <div class="jd-tagdata jd-tagdescr"><p>The string describing the content of this scope.
+  <div class="jd-tagdata jd-tagdescr"><p>The string that describes the content of the result.
 </p></div>
 
     </div>
@@ -3610,8 +3682,7 @@ From interface
       </div>
     <div class="jd-details-descr">
       
-  <div class="jd-tagdata jd-tagdescr"><p>Family name. In the U.S., the last name of an Person. This can be used along with givenName
- instead of the Name property.
+  <div class="jd-tagdata jd-tagdescr"><p>Family name. This property can be used with givenName instead of the name property.
 </p></div>
 
     </div>
@@ -3701,8 +3772,7 @@ From interface
       </div>
     <div class="jd-details-descr">
       
-  <div class="jd-tagdata jd-tagdescr"><p>Given name. In the U.S., the first name of a Person. This can be used along with familyName
- instead of the Name property.
+  <div class="jd-tagdata jd-tagdescr"><p>Given name. This property can be used with familyName instead of the name property.
 </p></div>
 
     </div>
@@ -3762,7 +3832,9 @@ From interface
       </div>
     <div class="jd-details-descr">
       
-  <div class="jd-tagdata jd-tagdescr"><p>The id for this item scope.
+  <div class="jd-tagdata jd-tagdescr"><p>An identifier for the target. Your app can choose how to identify targets. The target.id is
+ required if you are writing an activity that does not have a corresponding web page or
+ target.url property.
 </p></div>
 
     </div>
@@ -3792,7 +3864,8 @@ From interface
       </div>
     <div class="jd-details-descr">
       
-  <div class="jd-tagdata jd-tagdescr"><p>A url to the image for this scope.
+  <div class="jd-tagdata jd-tagdescr"><p>A URL to the image that represents this result. For example, if a user writes a review of a
+ restaurant and attaches a photo of their meal, you might use that photo as the result.image.
 </p></div>
 
     </div>
@@ -3942,7 +4015,8 @@ From interface
       </div>
     <div class="jd-details-descr">
       
-  <div class="jd-tagdata jd-tagdescr"><p>The name of this scope.
+  <div class="jd-tagdata jd-tagdescr"><p>The name of the result. In the example of a restaurant review, this might be the summary the
+ user gave their review such as "Great ambiance, but overpriced."
 </p></div>
 
     </div>
@@ -4032,7 +4106,7 @@ From interface
       </div>
     <div class="jd-details-descr">
       
-  <div class="jd-tagdata jd-tagdescr"><p>Player type required-for example, Flash or Silverlight.
+  <div class="jd-tagdata jd-tagdescr"><p>Player type that is required. For example: Flash or Silverlight.
 </p></div>
 
     </div>
@@ -4242,7 +4316,8 @@ From interface
       </div>
     <div class="jd-details-descr">
       
-  <div class="jd-tagdata jd-tagdescr"><p>Comment text, review text, etc.
+  <div class="jd-tagdata jd-tagdescr"><p>The text that is the result of the app activity. For example, if a user leaves a review of a
+ restaurant, this might be the text of the review.
 </p></div>
 
     </div>
@@ -4302,7 +4377,7 @@ From interface
       </div>
     <div class="jd-details-descr">
       
-  <div class="jd-tagdata jd-tagdescr"><p>A url to a thumbnail image for this scope.
+  <div class="jd-tagdata jd-tagdescr"><p>A URL to a thumbnail image that represents this result.
 </p></div>
 
     </div>
@@ -4365,7 +4440,7 @@ From interface
       </div>
     <div class="jd-details-descr">
       
-  <div class="jd-tagdata jd-tagdescr"><p>The item type.
+  <div class="jd-tagdata jd-tagdescr"><p>The schema.org URL that best describes the referenced target and matches the type of moment.
 </p></div>
 
     </div>
@@ -4395,7 +4470,8 @@ From interface
       </div>
     <div class="jd-details-descr">
       
-  <div class="jd-tagdata jd-tagdescr"><p>A URL for the item upon which the action was performed.
+  <div class="jd-tagdata jd-tagdescr"><p>The URL that points to the result object. For example, a permalink directly to a restaurant
+ reviewer's comment.
 </p></div>
 
     </div>
@@ -4455,7 +4531,8 @@ From interface
       </div>
     <div class="jd-details-descr">
       
-  <div class="jd-tagdata jd-tagdescr"><p>Worst possible rating value.
+  <div class="jd-tagdata jd-tagdescr"><p>Worst possible rating value that a result might obtain. This property defines the lower bound
+ for the ratingValue.
 </p></div>
 
     </div>

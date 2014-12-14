@@ -1,9 +1,13 @@
 LOCAL_PATH:= $(call my-dir)
 include $(CLEAR_VARS)
+LOCAL_ADDITIONAL_DEPENDENCIES := $(LOCAL_PATH)/Android.mk
 
 LOCAL_CFLAGS += -DHAVE_CONFIG_H -DKHTML_NO_EXCEPTIONS -DGKWQ_NO_JAVA
 LOCAL_CFLAGS += -DNO_SUPPORT_JS_BINDING -DQT_NO_WHEELEVENT -DKHTML_NO_XBL
 LOCAL_CFLAGS += -U__APPLE__
+LOCAL_CFLAGS += -Wno-unused-parameter -Wno-int-to-pointer-cast
+LOCAL_CFLAGS += -Wno-maybe-uninitialized -Wno-parentheses
+LOCAL_CPPFLAGS += -Wno-conversion-null
 
 ifeq ($(TARGET_ARCH), arm)
 	LOCAL_CFLAGS += -DPACKED="__attribute__ ((packed))"
@@ -19,7 +23,6 @@ LOCAL_CFLAGS += -DGL_GLEXT_PROTOTYPES -DEGL_EGLEXT_PROTOTYPES
 
 LOCAL_SRC_FILES:= \
 	AndroidRuntime.cpp \
-	Time.cpp \
 	com_android_internal_content_NativeLibraryHelper.cpp \
 	com_google_android_gles_jni_EGLImpl.cpp \
 	com_google_android_gles_jni_GLImpl.cpp.arm \
@@ -51,6 +54,7 @@ LOCAL_SRC_FILES:= \
 	android_view_KeyEvent.cpp \
 	android_view_KeyCharacterMap.cpp \
 	android_view_HardwareRenderer.cpp \
+	android_view_GraphicBuffer.cpp \
 	android_view_GLES20DisplayList.cpp \
 	android_view_GLES20Canvas.cpp \
 	android_view_MotionEvent.cpp \
@@ -59,10 +63,8 @@ LOCAL_SRC_FILES:= \
 	android_text_AndroidCharacter.cpp \
 	android_text_AndroidBidi.cpp \
 	android_os_Debug.cpp \
-	android_os_FileUtils.cpp \
 	android_os_MemoryFile.cpp \
 	android_os_MessageQueue.cpp \
-	android_os_ParcelFileDescriptor.cpp \
 	android_os_Parcel.cpp \
 	android_os_SELinux.cpp \
 	android_os_SystemClock.cpp \
@@ -72,14 +74,12 @@ LOCAL_SRC_FILES:= \
 	android_net_LocalSocketImpl.cpp \
 	android_net_NetUtils.cpp \
 	android_net_TrafficStats.cpp \
-	android_net_wifi_Wifi.cpp \
+	android_net_wifi_WifiNative.cpp \
 	android_nio_utils.cpp \
-	android_text_format_Time.cpp \
 	android_util_AssetManager.cpp \
 	android_util_Binder.cpp \
 	android_util_EventLog.cpp \
 	android_util_Log.cpp \
-	android_util_FloatMath.cpp \
 	android_util_Process.cpp \
 	android_util_StringBlock.cpp \
 	android_util_XmlBlock.cpp \
@@ -105,7 +105,6 @@ LOCAL_SRC_FILES:= \
 	android/graphics/Path.cpp \
 	android/graphics/PathMeasure.cpp \
 	android/graphics/PathEffect.cpp \
-	android_graphics_PixelFormat.cpp \
 	android/graphics/Picture.cpp \
 	android/graphics/PorterDuff.cpp \
 	android/graphics/BitmapRegionDecoder.cpp \
@@ -119,6 +118,7 @@ LOCAL_SRC_FILES:= \
 	android/graphics/Utils.cpp \
 	android/graphics/Xfermode.cpp \
 	android/graphics/YuvToJpegEncoder.cpp \
+	android/graphics/pdf/PdfDocument.cpp \
 	android_media_AudioRecord.cpp \
 	android_media_AudioSystem.cpp \
 	android_media_AudioTrack.cpp \
@@ -126,12 +126,12 @@ LOCAL_SRC_FILES:= \
 	android_media_RemoteDisplay.cpp \
 	android_media_ToneGenerator.cpp \
 	android_hardware_Camera.cpp \
+	android_hardware_camera2_CameraMetadata.cpp \
 	android_hardware_SensorManager.cpp \
 	android_hardware_SerialPort.cpp \
 	android_hardware_UsbDevice.cpp \
 	android_hardware_UsbDeviceConnection.cpp \
 	android_hardware_UsbRequest.cpp \
-	android_debug_JNITest.cpp \
 	android_util_FileObserver.cpp \
 	android/opengl/poly_clip.cpp.arm \
 	android/opengl/util.cpp.arm \
@@ -147,7 +147,8 @@ LOCAL_SRC_FILES:= \
 	android_content_res_ObbScanner.cpp \
 	android_content_res_Configuration.cpp \
 	android_animation_PropertyValuesHolder.cpp \
-	com_android_internal_net_NetworkStatsFactory.cpp
+	com_android_internal_net_NetworkStatsFactory.cpp \
+	com_android_internal_os_Zygote.cpp
 
 LOCAL_C_INCLUDES += \
 	$(JNI_H_INCLUDE) \
@@ -158,11 +159,10 @@ LOCAL_C_INCLUDES += \
 	$(call include-path-for, libhardware)/hardware \
 	$(call include-path-for, libhardware_legacy)/hardware_legacy \
 	$(TOP)/frameworks/av/include \
-	external/skia/include/core \
-	external/skia/include/effects \
-	external/skia/include/images \
-	external/skia/include/ports \
+	$(TOP)/system/media/camera/include \
+	external/icu/icu4c/source/common \
 	external/skia/src/core \
+	external/skia/src/pdf \
 	external/skia/src/images \
 	external/skia/include/utils \
 	external/sqlite/dist \
@@ -170,8 +170,6 @@ LOCAL_C_INCLUDES += \
 	external/expat/lib \
 	external/openssl/include \
 	external/tremor/Tremor \
-	external/icu4c/i18n \
-	external/icu4c/common \
 	external/jpeg \
 	external/harfbuzz_ng/src \
 	external/zlib \
@@ -179,6 +177,7 @@ LOCAL_C_INCLUDES += \
 	libcore/include
 
 LOCAL_SHARED_LIBRARIES := \
+	libmemtrack \
 	libandroidfw \
 	libexpat \
 	libnativehelper \
@@ -189,10 +188,11 @@ LOCAL_SHARED_LIBRARIES := \
 	libnetutils \
 	libui \
 	libgui \
+	libinput \
 	libcamera_client \
+	libcamera_metadata \
 	libskia \
 	libsqlite \
-	libdvm \
 	libEGL \
 	libGLESv1_CM \
 	libGLESv2 \
@@ -206,11 +206,11 @@ LOCAL_SHARED_LIBRARIES := \
 	libicuuc \
 	libicui18n \
 	libmedia \
-	libwpa_client \
 	libjpeg \
 	libusbhost \
 	libharfbuzz_ng \
-	libz
+	libz \
+	libnativebridge
 
 ifeq ($(USE_OPENGL_RENDERER),true)
 	LOCAL_SHARED_LIBRARIES += libhwui
@@ -218,15 +218,10 @@ endif
 
 LOCAL_SHARED_LIBRARIES += \
 	libdl
+
 # we need to access the private Bionic header
 # <bionic_tls.h> in com_google_android_gles_jni_GLImpl.cpp
-LOCAL_CFLAGS += -I$(LOCAL_PATH)/../../../../bionic/libc/private
-
-LOCAL_LDLIBS += -lpthread -ldl
-
-ifeq ($(WITH_MALLOC_LEAK_CHECK),true)
-	LOCAL_CFLAGS += -DMALLOC_LEAK_CHECK
-endif
+LOCAL_C_INCLUDES += bionic/libc/private
 
 LOCAL_MODULE:= libandroid_runtime
 

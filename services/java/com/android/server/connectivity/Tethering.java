@@ -37,13 +37,10 @@ import android.net.NetworkInfo;
 import android.net.NetworkUtils;
 import android.net.RouteInfo;
 import android.os.Binder;
-import android.os.HandlerThread;
-import android.os.IBinder;
 import android.os.INetworkManagementService;
 import android.os.Looper;
 import android.os.Message;
 import android.os.RemoteException;
-import android.os.ServiceManager;
 import android.os.UserHandle;
 import android.provider.Settings;
 import android.util.Log;
@@ -53,6 +50,8 @@ import com.android.internal.telephony.PhoneConstants;
 import com.android.internal.util.IState;
 import com.android.internal.util.State;
 import com.android.internal.util.StateMachine;
+import com.android.server.IoThread;
+import com.android.server.net.BaseNetworkObserver;
 import com.google.android.collect.Lists;
 
 import java.io.FileDescriptor;
@@ -72,7 +71,7 @@ import java.util.Set;
  *
  * TODO - look for parent classes and code sharing
  */
-public class Tethering extends INetworkManagementEventObserver.Stub {
+public class Tethering extends BaseNetworkObserver {
 
     private Context mContext;
     private final static String TAG = "Tethering";
@@ -100,7 +99,6 @@ public class Tethering extends INetworkManagementEventObserver.Stub {
     private final INetworkStatsService mStatsService;
     private final IConnectivityManager mConnService;
     private Looper mLooper;
-    private HandlerThread mThread;
 
     private HashMap<String, TetherInterfaceSM> mIfaces; // all tethered/tetherable ifaces
 
@@ -111,6 +109,7 @@ public class Tethering extends INetworkManagementEventObserver.Stub {
 
     // USB is  192.168.42.1 and 255.255.255.0
     // Wifi is 192.168.43.1 and 255.255.255.0
+    // P2P is 192.168.49.1 and 255.255.255.0
     // BT is limited to max default of 5 connections. 192.168.44.1 to 192.168.48.1
     // with 255.255.255.0
 
@@ -119,7 +118,7 @@ public class Tethering extends INetworkManagementEventObserver.Stub {
         "192.168.42.2", "192.168.42.254", "192.168.43.2", "192.168.43.254",
         "192.168.44.2", "192.168.44.254", "192.168.45.2", "192.168.45.254",
         "192.168.46.2", "192.168.46.254", "192.168.47.2", "192.168.47.254",
-        "192.168.48.2", "192.168.48.254",
+        "192.168.48.2", "192.168.48.254", "192.168.49.2", "192.168.49.254",
     };
 
     private String[] mDefaultDnsServers;
@@ -147,9 +146,7 @@ public class Tethering extends INetworkManagementEventObserver.Stub {
         mIfaces = new HashMap<String, TetherInterfaceSM>();
 
         // make our own thread so we don't anr the system
-        mThread = new HandlerThread("Tethering");
-        mThread.start();
-        mLooper = mThread.getLooper();
+        mLooper = IoThread.get().getLooper();
         mTetherMasterSM = new TetherMasterSM("TetherMaster", mLooper);
         mTetherMasterSM.start();
 
@@ -157,6 +154,7 @@ public class Tethering extends INetworkManagementEventObserver.Stub {
         IntentFilter filter = new IntentFilter();
         filter.addAction(UsbManager.ACTION_USB_STATE);
         filter.addAction(ConnectivityManager.CONNECTIVITY_ACTION);
+        filter.addAction(Intent.ACTION_CONFIGURATION_CHANGED);
         mContext.registerReceiver(mStateReceiver, filter);
 
         filter = new IntentFilter();
@@ -318,10 +316,6 @@ public class Tethering extends INetworkManagementEventObserver.Stub {
             mIfaces.remove(iface);
         }
     }
-
-    public void limitReached(String limitName, String iface) {}
-
-    public void interfaceClassDataActivityChanged(String label, boolean active) {}
 
     public int tether(String iface) {
         if (DBG) Log.d(TAG, "Tethering " + iface);
@@ -516,6 +510,8 @@ public class Tethering extends INetworkManagementEventObserver.Stub {
                     if (VDBG) Log.d(TAG, "Tethering got CONNECTIVITY_ACTION");
                     mTetherMasterSM.sendMessage(TetherMasterSM.CMD_UPSTREAM_CHANGED);
                 }
+            } else if (action.equals(Intent.ACTION_CONFIGURATION_CHANGED)) {
+                updateConfiguration();
             }
         }
     }
@@ -618,7 +614,7 @@ public class Tethering extends INetworkManagementEventObserver.Stub {
     public int[] getUpstreamIfaceTypes() {
         int values[];
         synchronized (mPublicSync) {
-            updateConfiguration();
+            updateConfiguration();  // TODO - remove?
             values = new int[mUpstreamIfaceTypes.size()];
             Iterator<Integer> iterator = mUpstreamIfaceTypes.iterator();
             for (int i=0; i < mUpstreamIfaceTypes.size(); i++) {
@@ -686,19 +682,6 @@ public class Tethering extends INetworkManagementEventObserver.Stub {
         return retVal;
     }
 
-    public String[] getTetheredIfacePairs() {
-        final ArrayList<String> list = Lists.newArrayList();
-        synchronized (mPublicSync) {
-            for (TetherInterfaceSM sm : mIfaces.values()) {
-                if (sm.isTethered()) {
-                    list.add(sm.mMyUpstreamIfaceName);
-                    list.add(sm.mIfaceName);
-                }
-            }
-        }
-        return list.toArray(new String[list.size()]);
-    }
-
     public String[] getTetherableIfaces() {
         ArrayList<String> list = new ArrayList<String>();
         synchronized (mPublicSync) {
@@ -715,6 +698,10 @@ public class Tethering extends INetworkManagementEventObserver.Stub {
             retVal[i] = list.get(i);
         }
         return retVal;
+    }
+
+    public String[] getTetheredDhcpRanges() {
+        return mDhcpRange;
     }
 
     public String[] getErroredIfaces() {
@@ -1289,7 +1276,7 @@ public class Tethering extends INetworkManagementEventObserver.Stub {
                 int upType = ConnectivityManager.TYPE_NONE;
                 String iface = null;
 
-                updateConfiguration();
+                updateConfiguration(); // TODO - remove?
 
                 synchronized (mPublicSync) {
                     if (VDBG) {

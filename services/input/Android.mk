@@ -36,12 +36,15 @@ LOCAL_SHARED_LIBRARIES := \
     libhardware_legacy \
     libskia \
     libgui \
-    libui
+    libui \
+    libinput \
+    libcrypto \
 
 LOCAL_C_INCLUDES := \
-    external/skia/include/core
+    external/openssl/include \
+    external/skia/include/core \
 
-LOCAL_MODULE:= libinput
+LOCAL_MODULE:= libinputservice
 
 LOCAL_MODULE_TAGS := optional
 

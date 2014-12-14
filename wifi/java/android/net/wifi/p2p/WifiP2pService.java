@@ -48,6 +48,7 @@ import android.net.wifi.p2p.nsd.WifiP2pServiceInfo;
 import android.net.wifi.p2p.nsd.WifiP2pServiceRequest;
 import android.net.wifi.p2p.nsd.WifiP2pServiceResponse;
 import android.os.Binder;
+import android.os.Bundle;
 import android.os.IBinder;
 import android.os.INetworkManagementService;
 import android.os.Handler;
@@ -84,6 +85,8 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
+
 
 /**
  * WifiP2pService includes a state machine to perform Wi-Fi p2p operations. Applications
@@ -106,6 +109,7 @@ public class WifiP2pService extends IWifiP2pManager.Stub {
 
     INetworkManagementService mNwService;
     private DhcpStateMachine mDhcpStateMachine;
+    private ConnectivityManager mCm;
 
     private P2pStateMachine mP2pStateMachine;
     private AsyncChannel mReplyChannel = new AsyncChannel();
@@ -173,6 +177,9 @@ public class WifiP2pService extends IWifiP2pManager.Stub {
     //   msg.obj  = StateMachine to send to when blocked
     public static final int BLOCK_DISCOVERY                 =   BASE + 15;
 
+    // set country code
+    public static final int SET_COUNTRY_CODE                =   BASE + 16;
+
     public static final int ENABLED                         = 1;
     public static final int DISABLED                        = 0;
 
@@ -197,6 +204,10 @@ public class WifiP2pService extends IWifiP2pManager.Stub {
      */
     private boolean mDiscoveryBlocked;
 
+    // Supplicant doesn't like setting the same country code multiple times (it may drop
+    // current connected network), so we save the country code here to avoid redundency
+    private String mLastSetCountryCode;
+
     /*
      * remember if we were in a scan when it had to be stopped
      */
@@ -216,9 +227,6 @@ public class WifiP2pService extends IWifiP2pManager.Stub {
     /* clients(application) information list. */
     private HashMap<Messenger, ClientInfo> mClientInfoList = new HashMap<Messenger, ClientInfo>();
 
-    /* Is chosen as a unique range to avoid conflict with
-       the range defined in Tethering.java */
-    private static final String[] DHCP_RANGE = {"192.168.49.2", "192.168.49.254"};
     private static final String SERVER_ADDRESS = "192.168.49.1";
 
     /**
@@ -628,6 +636,10 @@ public class WifiP2pService extends IWifiP2pManager.Stub {
                 case DhcpStateMachine.CMD_ON_QUIT:
                 case WifiMonitor.P2P_PROV_DISC_FAILURE_EVENT:
                 case SET_MIRACAST_MODE:
+                case WifiP2pManager.START_LISTEN:
+                case WifiP2pManager.STOP_LISTEN:
+                case WifiP2pManager.SET_CHANNEL:
+                case SET_COUNTRY_CODE:
                     break;
                 case WifiStateMachine.CMD_ENABLE_P2P:
                     // Enable is lazy and has no response
@@ -729,7 +741,16 @@ public class WifiP2pService extends IWifiP2pManager.Stub {
                     replyToMessage(message, WifiP2pManager.START_WPS_FAILED,
                             WifiP2pManager.P2P_UNSUPPORTED);
                     break;
-               default:
+                case WifiP2pManager.START_LISTEN:
+                    replyToMessage(message, WifiP2pManager.START_LISTEN_FAILED,
+                            WifiP2pManager.P2P_UNSUPPORTED);
+                    break;
+                case WifiP2pManager.STOP_LISTEN:
+                    replyToMessage(message, WifiP2pManager.STOP_LISTEN_FAILED,
+                            WifiP2pManager.P2P_UNSUPPORTED);
+                    break;
+
+                default:
                     return NOT_HANDLED;
             }
             return HANDLED;
@@ -858,7 +879,7 @@ public class WifiP2pService extends IWifiP2pManager.Stub {
                     }
                     if (mGroups.clear()) sendP2pPersistentGroupsChangedBroadcast();
 
-                    mWifiNative.closeSupplicantConnection();
+                    mWifiMonitor.stopMonitoring();
                     transitionTo(mP2pDisablingState);
                     break;
                 case WifiP2pManager.SET_DEVICE_NAME:
@@ -1022,6 +1043,45 @@ public class WifiP2pService extends IWifiP2pManager.Stub {
                 case SET_MIRACAST_MODE:
                     mWifiNative.setMiracastMode(message.arg1);
                     break;
+                case WifiP2pManager.START_LISTEN:
+                    if (DBG) logd(getName() + " start listen mode");
+                    mWifiNative.p2pFlush();
+                    if (mWifiNative.p2pExtListen(true, 500, 500)) {
+                        replyToMessage(message, WifiP2pManager.START_LISTEN_SUCCEEDED);
+                    } else {
+                        replyToMessage(message, WifiP2pManager.START_LISTEN_FAILED);
+                    }
+                    break;
+                case WifiP2pManager.STOP_LISTEN:
+                    if (DBG) logd(getName() + " stop listen mode");
+                    if (mWifiNative.p2pExtListen(false, 0, 0)) {
+                        replyToMessage(message, WifiP2pManager.STOP_LISTEN_SUCCEEDED);
+                    } else {
+                        replyToMessage(message, WifiP2pManager.STOP_LISTEN_FAILED);
+                    }
+                    mWifiNative.p2pFlush();
+                    break;
+                case WifiP2pManager.SET_CHANNEL:
+                    Bundle p2pChannels = (Bundle) message.obj;
+                    int lc = p2pChannels.getInt("lc", 0);
+                    int oc = p2pChannels.getInt("oc", 0);
+                    if (DBG) logd(getName() + " set listen and operating channel");
+                    if (mWifiNative.p2pSetChannel(lc, oc)) {
+                        replyToMessage(message, WifiP2pManager.SET_CHANNEL_SUCCEEDED);
+                    } else {
+                        replyToMessage(message, WifiP2pManager.SET_CHANNEL_FAILED);
+                    }
+                    break;
+                case SET_COUNTRY_CODE:
+                    String countryCode = (String) message.obj;
+                    countryCode = countryCode.toUpperCase(Locale.ROOT);
+                    if (mLastSetCountryCode == null ||
+                            countryCode.equals(mLastSetCountryCode) == false) {
+                        if (mWifiNative.setCountryCode(countryCode)) {
+                            mLastSetCountryCode = countryCode;
+                        }
+                    }
+                    break;
                 default:
                    return NOT_HANDLED;
             }
@@ -1032,6 +1092,8 @@ public class WifiP2pService extends IWifiP2pManager.Stub {
         public void exit() {
             sendP2pStateChangedBroadcast(false);
             mNetworkInfo.setIsAvailable(false);
+
+            mLastSetCountryCode = null;
         }
     }
 
@@ -1169,6 +1231,35 @@ public class WifiP2pService extends IWifiP2pManager.Stub {
                     } else {
                         loge("Unexpected group creation, remove " + mGroup);
                         mWifiNative.p2pGroupRemove(mGroup.getInterface());
+                    }
+                    break;
+                case WifiP2pManager.START_LISTEN:
+                    if (DBG) logd(getName() + " start listen mode");
+                    mWifiNative.p2pFlush();
+                    if (mWifiNative.p2pExtListen(true, 500, 500)) {
+                        replyToMessage(message, WifiP2pManager.START_LISTEN_SUCCEEDED);
+                    } else {
+                        replyToMessage(message, WifiP2pManager.START_LISTEN_FAILED);
+                    }
+                    break;
+                case WifiP2pManager.STOP_LISTEN:
+                    if (DBG) logd(getName() + " stop listen mode");
+                    if (mWifiNative.p2pExtListen(false, 0, 0)) {
+                        replyToMessage(message, WifiP2pManager.STOP_LISTEN_SUCCEEDED);
+                    } else {
+                        replyToMessage(message, WifiP2pManager.STOP_LISTEN_FAILED);
+                    }
+                    mWifiNative.p2pFlush();
+                    break;
+                case WifiP2pManager.SET_CHANNEL:
+                    Bundle p2pChannels = (Bundle) message.obj;
+                    int lc = p2pChannels.getInt("lc", 0);
+                    int oc = p2pChannels.getInt("oc", 0);
+                    if (DBG) logd(getName() + " set listen and operating channel");
+                    if (mWifiNative.p2pSetChannel(lc, oc)) {
+                        replyToMessage(message, WifiP2pManager.SET_CHANNEL_SUCCEEDED);
+                    } else {
+                        replyToMessage(message, WifiP2pManager.SET_CHANNEL_FAILED);
                     }
                     break;
                 default:
@@ -1965,8 +2056,15 @@ public class WifiP2pService extends IWifiP2pManager.Stub {
         mContext.sendStickyBroadcastAsUser(intent, UserHandle.ALL);
     }
 
+    private void checkAndSetConnectivityInstance() {
+        if (mCm == null) {
+            mCm = (ConnectivityManager) mContext.getSystemService(Context.CONNECTIVITY_SERVICE);
+        }
+    }
+
     private void startDhcpServer(String intf) {
         InterfaceConfiguration ifcg = null;
+        checkAndSetConnectivityInstance();
         try {
             ifcg = mNwService.getInterfaceConfig(intf);
             ifcg.setLinkAddress(new LinkAddress(NetworkUtils.numericToInetAddress(
@@ -1974,17 +2072,30 @@ public class WifiP2pService extends IWifiP2pManager.Stub {
             ifcg.setInterfaceUp();
             mNwService.setInterfaceConfig(intf, ifcg);
             /* This starts the dnsmasq server */
-            mNwService.startTethering(DHCP_RANGE);
+            String[] tetheringDhcpRanges = mCm.getTetheredDhcpRanges();
+            if (mNwService.isTetheringStarted()) {
+                if (DBG) logd("Stop exist tethering and will restart it");
+                mNwService.stopTethering();
+                mNwService.tetherInterface(intf);
+            }
+            mNwService.startTethering(tetheringDhcpRanges);
         } catch (Exception e) {
             loge("Error configuring interface " + intf + ", :" + e);
             return;
         }
-
         logd("Started Dhcp server on " + intf);
    }
 
     private void stopDhcpServer(String intf) {
         try {
+            for (String temp : mNwService.listTetheredInterfaces()) {
+                logd("List all interfaces " + temp);
+                if (temp.compareTo(intf) != 0 ) {
+                    logd("Found other tethering interface so keep tethering alive");
+                    mNwService.untetherInterface(intf);
+                    return;
+                }
+            }
             mNwService.stopTethering();
         } catch (Exception e) {
             loge("Error stopping Dhcp server" + e);
@@ -2465,6 +2576,12 @@ public class WifiP2pService extends IWifiP2pManager.Stub {
         mWifiNative.p2pServiceFlush();
         mServiceTransactionId = 0;
         mServiceDiscReqId = null;
+
+        String countryCode = Settings.Global.getString(mContext.getContentResolver(),
+                Settings.Global.WIFI_COUNTRY_CODE);
+        if (countryCode != null && !countryCode.isEmpty()) {
+            mP2pStateMachine.sendMessage(SET_COUNTRY_CODE, countryCode);
+        }
 
         updatePersistentNetworks(RELOAD);
     }

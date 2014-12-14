@@ -28,7 +28,7 @@ public final class InputWindowHandle {
     // Pointer to the native input window handle.
     // This field is lazily initialized via JNI.
     @SuppressWarnings("unused")
-    private int ptr;
+    private long ptr;
 
     // The input application handle.
     public final InputApplicationHandle inputApplicationHandle;
@@ -44,6 +44,7 @@ public final class InputWindowHandle {
 
     // Window layout params attributes.  (WindowManager.LayoutParams)
     public int layoutParamsFlags;
+    public int layoutParamsPrivateFlags;
     public int layoutParamsType;
 
     // Dispatching timeout.

@@ -114,7 +114,8 @@ public abstract class CompoundButton extends Button implements Checkable {
         if (mChecked != checked) {
             mChecked = checked;
             refreshDrawableState();
-            notifyAccessibilityStateChanged();
+            notifyViewAccessibilityStateChangedIfNeeded(
+                    AccessibilityEvent.CONTENT_CHANGE_TYPE_UNDEFINED);
 
             // Avoid infinite recursions if setChecked() is called from a listener
             if (mBroadcasting) {
@@ -199,10 +200,8 @@ public abstract class CompoundButton extends Button implements Checkable {
                 unscheduleDrawable(mButtonDrawable);
             }
             d.setCallback(this);
-            d.setState(getDrawableState());
             d.setVisible(getVisibility() == VISIBLE, false);
             mButtonDrawable = d;
-            mButtonDrawable.setState(null);
             setMinHeight(mButtonDrawable.getIntrinsicHeight());
         }
 
@@ -364,8 +363,6 @@ public abstract class CompoundButton extends Button implements Checkable {
 
     @Override
     public Parcelable onSaveInstanceState() {
-        // Force our ancestor class to save its state
-        setFreezesText(true);
         Parcelable superState = super.onSaveInstanceState();
 
         SavedState ss = new SavedState(superState);

@@ -16,6 +16,7 @@
 
 package android.app;
 
+import android.util.ArrayMap;
 import com.android.internal.util.ArrayUtils;
 
 import android.content.BroadcastReceiver;
@@ -40,7 +41,7 @@ import android.os.Trace;
 import android.os.UserHandle;
 import android.util.AndroidRuntimeException;
 import android.util.Slog;
-import android.view.CompatibilityInfoHolder;
+import android.view.DisplayAdjustments;
 import android.view.Display;
 
 import java.io.File;
@@ -49,8 +50,6 @@ import java.io.InputStream;
 import java.lang.ref.WeakReference;
 import java.net.URL;
 import java.util.Enumeration;
-import java.util.HashMap;
-import java.util.Iterator;
 
 final class IntentReceiverLeaked extends AndroidRuntimeException {
     public IntentReceiverLeaked(String msg) {
@@ -73,10 +72,11 @@ public final class LoadedApk {
     private static final String TAG = "LoadedApk";
 
     private final ActivityThread mActivityThread;
-    private final ApplicationInfo mApplicationInfo;
+    private ApplicationInfo mApplicationInfo;
     final String mPackageName;
     private final String mAppDir;
     private final String mResDir;
+    private final String[] mOverlayDirs;
     private final String[] mSharedLibraries;
     private final String mDataDir;
     private final String mLibDir;
@@ -84,19 +84,19 @@ public final class LoadedApk {
     private final ClassLoader mBaseClassLoader;
     private final boolean mSecurityViolation;
     private final boolean mIncludeCode;
-    public final CompatibilityInfoHolder mCompatibilityInfo = new CompatibilityInfoHolder();
+    private final DisplayAdjustments mDisplayAdjustments = new DisplayAdjustments();
     Resources mResources;
     private ClassLoader mClassLoader;
     private Application mApplication;
 
-    private final HashMap<Context, HashMap<BroadcastReceiver, LoadedApk.ReceiverDispatcher>> mReceivers
-        = new HashMap<Context, HashMap<BroadcastReceiver, LoadedApk.ReceiverDispatcher>>();
-    private final HashMap<Context, HashMap<BroadcastReceiver, LoadedApk.ReceiverDispatcher>> mUnregisteredReceivers
-    = new HashMap<Context, HashMap<BroadcastReceiver, LoadedApk.ReceiverDispatcher>>();
-    private final HashMap<Context, HashMap<ServiceConnection, LoadedApk.ServiceDispatcher>> mServices
-        = new HashMap<Context, HashMap<ServiceConnection, LoadedApk.ServiceDispatcher>>();
-    private final HashMap<Context, HashMap<ServiceConnection, LoadedApk.ServiceDispatcher>> mUnboundServices
-        = new HashMap<Context, HashMap<ServiceConnection, LoadedApk.ServiceDispatcher>>();
+    private final ArrayMap<Context, ArrayMap<BroadcastReceiver, ReceiverDispatcher>> mReceivers
+        = new ArrayMap<Context, ArrayMap<BroadcastReceiver, LoadedApk.ReceiverDispatcher>>();
+    private final ArrayMap<Context, ArrayMap<BroadcastReceiver, LoadedApk.ReceiverDispatcher>> mUnregisteredReceivers
+        = new ArrayMap<Context, ArrayMap<BroadcastReceiver, LoadedApk.ReceiverDispatcher>>();
+    private final ArrayMap<Context, ArrayMap<ServiceConnection, LoadedApk.ServiceDispatcher>> mServices
+        = new ArrayMap<Context, ArrayMap<ServiceConnection, LoadedApk.ServiceDispatcher>>();
+    private final ArrayMap<Context, ArrayMap<ServiceConnection, LoadedApk.ServiceDispatcher>> mUnboundServices
+        = new ArrayMap<Context, ArrayMap<ServiceConnection, LoadedApk.ServiceDispatcher>>();
 
     int mClientCount = 0;
 
@@ -111,8 +111,7 @@ public final class LoadedApk {
      * so MUST NOT call back out to the activity manager.
      */
     public LoadedApk(ActivityThread activityThread, ApplicationInfo aInfo,
-            CompatibilityInfo compatInfo,
-            ActivityThread mainThread, ClassLoader baseLoader,
+            CompatibilityInfo compatInfo, ClassLoader baseLoader,
             boolean securityViolation, boolean includeCode) {
         mActivityThread = activityThread;
         mApplicationInfo = aInfo;
@@ -121,6 +120,7 @@ public final class LoadedApk {
         final int myUid = Process.myUid();
         mResDir = aInfo.uid == myUid ? aInfo.sourceDir
                 : aInfo.publicSourceDir;
+        mOverlayDirs = aInfo.resourceDirs;
         if (!UserHandle.isSameUser(aInfo.uid, myUid) && !Process.isIsolated()) {
             aInfo.dataDir = PackageManager.getDataDirForUser(UserHandle.getUserId(myUid),
                     mPackageName);
@@ -132,34 +132,21 @@ public final class LoadedApk {
         mBaseClassLoader = baseLoader;
         mSecurityViolation = securityViolation;
         mIncludeCode = includeCode;
-        mCompatibilityInfo.set(compatInfo);
-
-        if (mAppDir == null) {
-            if (ActivityThread.mSystemContext == null) {
-                ActivityThread.mSystemContext =
-                    ContextImpl.createSystemContext(mainThread);
-                ActivityThread.mSystemContext.getResources().updateConfiguration(
-                         mainThread.getConfiguration(),
-                         mainThread.getDisplayMetricsLocked(
-                                 Display.DEFAULT_DISPLAY, compatInfo),
-                         compatInfo);
-                //Slog.i(TAG, "Created system resources "
-                //        + mSystemContext.getResources() + ": "
-                //        + mSystemContext.getResources().getConfiguration());
-            }
-            mClassLoader = ActivityThread.mSystemContext.getClassLoader();
-            mResources = ActivityThread.mSystemContext.getResources();
-        }
+        mDisplayAdjustments.setCompatibilityInfo(compatInfo);
     }
 
-    public LoadedApk(ActivityThread activityThread, String name,
-            Context systemContext, ApplicationInfo info, CompatibilityInfo compatInfo) {
+    /**
+     * Create information about the system package.
+     * Must call {@link #installSystemApplicationInfo} later.
+     */
+    LoadedApk(ActivityThread activityThread) {
         mActivityThread = activityThread;
-        mApplicationInfo = info != null ? info : new ApplicationInfo();
-        mApplicationInfo.packageName = name;
-        mPackageName = name;
+        mApplicationInfo = new ApplicationInfo();
+        mApplicationInfo.packageName = "android";
+        mPackageName = "android";
         mAppDir = null;
         mResDir = null;
+        mOverlayDirs = null;
         mSharedLibraries = null;
         mDataDir = null;
         mDataDirFile = null;
@@ -167,9 +154,16 @@ public final class LoadedApk {
         mBaseClassLoader = null;
         mSecurityViolation = false;
         mIncludeCode = true;
-        mClassLoader = systemContext.getClassLoader();
-        mResources = systemContext.getResources();
-        mCompatibilityInfo.set(compatInfo);
+        mClassLoader = ClassLoader.getSystemClassLoader();
+        mResources = Resources.getSystem();
+    }
+
+    /**
+     * Sets application info about the system package.
+     */
+    void installSystemApplicationInfo(ApplicationInfo info) {
+        assert info.packageName.equals("android");
+        mApplicationInfo = info;
     }
 
     public String getPackageName() {
@@ -182,6 +176,14 @@ public final class LoadedApk {
 
     public boolean isSecurityViolation() {
         return mSecurityViolation;
+    }
+
+    public CompatibilityInfo getCompatibilityInfo() {
+        return mDisplayAdjustments.getCompatibilityInfo();
+    }
+
+    public void setCompatibilityInfo(CompatibilityInfo compatInfo) {
+        mDisplayAdjustments.setCompatibilityInfo(compatInfo);
     }
 
     /**
@@ -464,6 +466,10 @@ public final class LoadedApk {
         return mResDir;
     }
 
+    public String[] getOverlayDirs() {
+        return mOverlayDirs;
+    }
+
     public String getDataDir() {
         return mDataDir;
     }
@@ -478,7 +484,7 @@ public final class LoadedApk {
 
     public Resources getResources(ActivityThread mainThread) {
         if (mResources == null) {
-            mResources = mainThread.getTopLevelResources(mResDir,
+            mResources = mainThread.getTopLevelResources(mResDir, mOverlayDirs,
                     Display.DEFAULT_DISPLAY, null, this);
         }
         return mResources;
@@ -499,8 +505,7 @@ public final class LoadedApk {
 
         try {
             java.lang.ClassLoader cl = getClassLoader();
-            ContextImpl appContext = new ContextImpl();
-            appContext.init(this, null, mActivityThread);
+            ContextImpl appContext = ContextImpl.createAppContext(mActivityThread, this);
             app = mActivityThread.mInstrumentation.newApplication(
                     cl, appClass, appContext);
             appContext.setOuterContext(app);
@@ -532,12 +537,11 @@ public final class LoadedApk {
     public void removeContextRegistrations(Context context,
             String who, String what) {
         final boolean reportRegistrationLeaks = StrictMode.vmRegistrationLeaksEnabled();
-        HashMap<BroadcastReceiver, LoadedApk.ReceiverDispatcher> rmap =
-            mReceivers.remove(context);
+        ArrayMap<BroadcastReceiver, LoadedApk.ReceiverDispatcher> rmap =
+                mReceivers.remove(context);
         if (rmap != null) {
-            Iterator<LoadedApk.ReceiverDispatcher> it = rmap.values().iterator();
-            while (it.hasNext()) {
-                LoadedApk.ReceiverDispatcher rd = it.next();
+            for (int i=0; i<rmap.size(); i++) {
+                LoadedApk.ReceiverDispatcher rd = rmap.valueAt(i);
                 IntentReceiverLeaked leak = new IntentReceiverLeaked(
                         what + " " + who + " has leaked IntentReceiver "
                         + rd.getIntentReceiver() + " that was " +
@@ -558,12 +562,11 @@ public final class LoadedApk {
         }
         mUnregisteredReceivers.remove(context);
         //Slog.i(TAG, "Receiver registrations: " + mReceivers);
-        HashMap<ServiceConnection, LoadedApk.ServiceDispatcher> smap =
+        ArrayMap<ServiceConnection, LoadedApk.ServiceDispatcher> smap =
             mServices.remove(context);
         if (smap != null) {
-            Iterator<LoadedApk.ServiceDispatcher> it = smap.values().iterator();
-            while (it.hasNext()) {
-                LoadedApk.ServiceDispatcher sd = it.next();
+            for (int i=0; i<smap.size(); i++) {
+                LoadedApk.ServiceDispatcher sd = smap.valueAt(i);
                 ServiceConnectionLeaked leak = new ServiceConnectionLeaked(
                         what + " " + who + " has leaked ServiceConnection "
                         + sd.getServiceConnection() + " that was originally bound here");
@@ -590,7 +593,7 @@ public final class LoadedApk {
             Instrumentation instrumentation, boolean registered) {
         synchronized (mReceivers) {
             LoadedApk.ReceiverDispatcher rd = null;
-            HashMap<BroadcastReceiver, LoadedApk.ReceiverDispatcher> map = null;
+            ArrayMap<BroadcastReceiver, LoadedApk.ReceiverDispatcher> map = null;
             if (registered) {
                 map = mReceivers.get(context);
                 if (map != null) {
@@ -602,7 +605,7 @@ public final class LoadedApk {
                         instrumentation, registered);
                 if (registered) {
                     if (map == null) {
-                        map = new HashMap<BroadcastReceiver, LoadedApk.ReceiverDispatcher>();
+                        map = new ArrayMap<BroadcastReceiver, LoadedApk.ReceiverDispatcher>();
                         mReceivers.put(context, map);
                     }
                     map.put(r, rd);
@@ -618,7 +621,7 @@ public final class LoadedApk {
     public IIntentReceiver forgetReceiverDispatcher(Context context,
             BroadcastReceiver r) {
         synchronized (mReceivers) {
-            HashMap<BroadcastReceiver, LoadedApk.ReceiverDispatcher> map = mReceivers.get(context);
+            ArrayMap<BroadcastReceiver, LoadedApk.ReceiverDispatcher> map = mReceivers.get(context);
             LoadedApk.ReceiverDispatcher rd = null;
             if (map != null) {
                 rd = map.get(r);
@@ -628,10 +631,10 @@ public final class LoadedApk {
                         mReceivers.remove(context);
                     }
                     if (r.getDebugUnregister()) {
-                        HashMap<BroadcastReceiver, LoadedApk.ReceiverDispatcher> holder
+                        ArrayMap<BroadcastReceiver, LoadedApk.ReceiverDispatcher> holder
                                 = mUnregisteredReceivers.get(context);
                         if (holder == null) {
-                            holder = new HashMap<BroadcastReceiver, LoadedApk.ReceiverDispatcher>();
+                            holder = new ArrayMap<BroadcastReceiver, LoadedApk.ReceiverDispatcher>();
                             mUnregisteredReceivers.put(context, holder);
                         }
                         RuntimeException ex = new IllegalArgumentException(
@@ -644,7 +647,7 @@ public final class LoadedApk {
                     return rd.getIIntentReceiver();
                 }
             }
-            HashMap<BroadcastReceiver, LoadedApk.ReceiverDispatcher> holder
+            ArrayMap<BroadcastReceiver, LoadedApk.ReceiverDispatcher> holder
                     = mUnregisteredReceivers.get(context);
             if (holder != null) {
                 rd = holder.get(r);
@@ -860,14 +863,14 @@ public final class LoadedApk {
             Context context, Handler handler, int flags) {
         synchronized (mServices) {
             LoadedApk.ServiceDispatcher sd = null;
-            HashMap<ServiceConnection, LoadedApk.ServiceDispatcher> map = mServices.get(context);
+            ArrayMap<ServiceConnection, LoadedApk.ServiceDispatcher> map = mServices.get(context);
             if (map != null) {
                 sd = map.get(c);
             }
             if (sd == null) {
                 sd = new ServiceDispatcher(c, context, handler, flags);
                 if (map == null) {
-                    map = new HashMap<ServiceConnection, LoadedApk.ServiceDispatcher>();
+                    map = new ArrayMap<ServiceConnection, LoadedApk.ServiceDispatcher>();
                     mServices.put(context, map);
                 }
                 map.put(c, sd);
@@ -881,7 +884,7 @@ public final class LoadedApk {
     public final IServiceConnection forgetServiceDispatcher(Context context,
             ServiceConnection c) {
         synchronized (mServices) {
-            HashMap<ServiceConnection, LoadedApk.ServiceDispatcher> map
+            ArrayMap<ServiceConnection, LoadedApk.ServiceDispatcher> map
                     = mServices.get(context);
             LoadedApk.ServiceDispatcher sd = null;
             if (map != null) {
@@ -893,10 +896,10 @@ public final class LoadedApk {
                         mServices.remove(context);
                     }
                     if ((sd.getFlags()&Context.BIND_DEBUG_UNBIND) != 0) {
-                        HashMap<ServiceConnection, LoadedApk.ServiceDispatcher> holder
+                        ArrayMap<ServiceConnection, LoadedApk.ServiceDispatcher> holder
                                 = mUnboundServices.get(context);
                         if (holder == null) {
-                            holder = new HashMap<ServiceConnection, LoadedApk.ServiceDispatcher>();
+                            holder = new ArrayMap<ServiceConnection, LoadedApk.ServiceDispatcher>();
                             mUnboundServices.put(context, holder);
                         }
                         RuntimeException ex = new IllegalArgumentException(
@@ -908,7 +911,7 @@ public final class LoadedApk {
                     return sd.getIServiceConnection();
                 }
             }
-            HashMap<ServiceConnection, LoadedApk.ServiceDispatcher> holder
+            ArrayMap<ServiceConnection, LoadedApk.ServiceDispatcher> holder
                     = mUnboundServices.get(context);
             if (holder != null) {
                 sd = holder.get(c);
@@ -961,8 +964,8 @@ public final class LoadedApk {
             }
         }
 
-        private final HashMap<ComponentName, ServiceDispatcher.ConnectionInfo> mActiveConnections
-            = new HashMap<ComponentName, ServiceDispatcher.ConnectionInfo>();
+        private final ArrayMap<ComponentName, ServiceDispatcher.ConnectionInfo> mActiveConnections
+            = new ArrayMap<ComponentName, ServiceDispatcher.ConnectionInfo>();
 
         ServiceDispatcher(ServiceConnection conn,
                 Context context, Handler activityThread, int flags) {
@@ -992,9 +995,8 @@ public final class LoadedApk {
 
         void doForget() {
             synchronized(this) {
-                Iterator<ServiceDispatcher.ConnectionInfo> it = mActiveConnections.values().iterator();
-                while (it.hasNext()) {
-                    ServiceDispatcher.ConnectionInfo ci = it.next();
+                for (int i=0; i<mActiveConnections.size(); i++) {
+                    ServiceDispatcher.ConnectionInfo ci = mActiveConnections.valueAt(i);
                     ci.binder.unlinkToDeath(ci.deathMonitor, 0);
                 }
                 mActiveConnections.clear();

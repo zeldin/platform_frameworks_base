@@ -73,6 +73,8 @@ public class PhoneConstants {
     public static final String PHONE_NAME_KEY = "phoneName";
     public static final String FAILURE_REASON_KEY = "reason";
     public static final String STATE_CHANGE_REASON_KEY = "reason";
+    public static final String DATA_NETWORK_TYPE_KEY = "networkType";
+    public static final String DATA_FAILURE_CAUSE_KEY = "failCause";
     public static final String DATA_APN_TYPE_KEY = "apnType";
     public static final String DATA_APN_KEY = "apn";
     public static final String DATA_LINK_PROPERTIES_KEY = "linkProperties";
@@ -84,6 +86,14 @@ public class PhoneConstants {
     public static final String PHONE_IN_ECM_STATE = "phoneinECMState";
 
     public static final String REASON_LINK_PROPERTIES_CHANGED = "linkPropertiesChanged";
+
+    /**
+     * Return codes for supplyPinReturnResult and
+     * supplyPukReturnResult APIs
+     */
+    public static final int PIN_RESULT_SUCCESS = 0;
+    public static final int PIN_PASSWORD_INCORRECT = 1;
+    public static final int PIN_GENERAL_FAILURE = 2;
 
     /**
      * Return codes for <code>enableApnType()</code>
@@ -119,5 +129,7 @@ public class PhoneConstants {
     public static final String APN_TYPE_IMS = "ims";
     /** APN type for CBS */
     public static final String APN_TYPE_CBS = "cbs";
+    /** APN type for IA Initial Attach APN */
+    public static final String APN_TYPE_IA = "ia";
 
 }

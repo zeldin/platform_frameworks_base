@@ -32,6 +32,7 @@ import android.media.AudioService;
 import android.media.AudioSystem;
 import android.media.RingtoneManager;
 import android.media.ToneGenerator;
+import android.media.VolumeController;
 import android.net.Uri;
 import android.os.Handler;
 import android.os.Message;
@@ -55,7 +56,8 @@ import java.util.HashMap;
  *
  * @hide
  */
-public class VolumePanel extends Handler implements OnSeekBarChangeListener, View.OnClickListener
+public class VolumePanel extends Handler implements OnSeekBarChangeListener, View.OnClickListener,
+        VolumeController
 {
     private static final String TAG = "VolumePanel";
     private static boolean LOGD = false;
@@ -309,7 +311,6 @@ public class VolumePanel extends Handler implements OnSeekBarChangeListener, Vie
         lp.type = LayoutParams.TYPE_VOLUME_OVERLAY;
         lp.width = LayoutParams.WRAP_CONTENT;
         lp.height = LayoutParams.WRAP_CONTENT;
-        lp.privateFlags |= LayoutParams.PRIVATE_FLAG_FORCE_SHOW_NAV_BAR;
         window.setAttributes(lp);
         window.addFlags(LayoutParams.FLAG_NOT_FOCUSABLE | LayoutParams.FLAG_NOT_TOUCH_MODAL
                 | LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH);

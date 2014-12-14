@@ -21,6 +21,7 @@
 #include "android_media_MediaDrm.h"
 
 #include "android_runtime/AndroidRuntime.h"
+#include "android_runtime/Log.h"
 #include "android_os_Parcel.h"
 #include "jni.h"
 #include "JNIHelp.h"
@@ -185,6 +186,7 @@ void JNIDrmListener::notify(DrmPlugin::EventType eventType, int extra,
             nativeParcel->setData(obj->data(), obj->dataSize());
             env->CallStaticVoidMethod(mClass, gFields.post_event, mObject,
                     jeventType, extra, jParcel);
+            env->DeleteLocalRef(jParcel);
         }
     }
 
@@ -242,6 +244,9 @@ static bool throwExceptionAsNecessary(
     } else if (err == ERROR_DRM_NOT_PROVISIONED) {
         jniThrowException(env, "android/media/NotProvisionedException", msg);
         return true;
+    } else if (err == ERROR_DRM_RESOURCE_BUSY) {
+        jniThrowException(env, "android/media/ResourceBusyException", msg);
+        return true;
     } else if (err == ERROR_DRM_DEVICE_REVOKED) {
         jniThrowException(env, "android/media/DeniedByServerException", msg);
         return true;
@@ -263,7 +268,7 @@ static bool throwExceptionAsNecessary(
 }
 
 static sp<IDrm> GetDrm(JNIEnv *env, jobject thiz) {
-    JDrm *jdrm = (JDrm *)env->GetIntField(thiz, gFields.context);
+    JDrm *jdrm = (JDrm *)env->GetLongField(thiz, gFields.context);
     return jdrm ? jdrm->getDrm() : NULL;
 }
 
@@ -345,14 +350,14 @@ void JDrm::notify(DrmPlugin::EventType eventType, int extra, const Parcel *obj) 
 
 
 // static
-bool JDrm::IsCryptoSchemeSupported(const uint8_t uuid[16]) {
+bool JDrm::IsCryptoSchemeSupported(const uint8_t uuid[16], const String8 &mimeType) {
     sp<IDrm> drm = MakeDrm();
 
     if (drm == NULL) {
         return false;
     }
 
-    return drm->isCryptoSchemeSupported(uuid);
+    return drm->isCryptoSchemeSupported(uuid, mimeType);
 }
 
 status_t JDrm::initCheck() const {
@@ -480,14 +485,14 @@ using namespace android;
 
 static sp<JDrm> setDrm(
         JNIEnv *env, jobject thiz, const sp<JDrm> &drm) {
-    sp<JDrm> old = (JDrm *)env->GetIntField(thiz, gFields.context);
+    sp<JDrm> old = (JDrm *)env->GetLongField(thiz, gFields.context);
     if (drm != NULL) {
         drm->incStrong(thiz);
     }
     if (old != NULL) {
         old->decStrong(thiz);
     }
-    env->SetIntField(thiz, gFields.context, (int)drm.get());
+    env->SetLongField(thiz, gFields.context, reinterpret_cast<jlong>(drm.get()));
 
     return old;
 }
@@ -516,7 +521,7 @@ static void android_media_MediaDrm_release(JNIEnv *env, jobject thiz) {
 static void android_media_MediaDrm_native_init(JNIEnv *env) {
     jclass clazz;
     FIND_CLASS(clazz, "android/media/MediaDrm");
-    GET_FIELD_ID(gFields.context, clazz, "mNativeContext", "I");
+    GET_FIELD_ID(gFields.context, clazz, "mNativeContext", "J");
     GET_STATIC_METHOD_ID(gFields.post_event, clazz, "postEventFromNative",
                          "(Ljava/lang/Object;IILjava/lang/Object;)V");
 
@@ -608,7 +613,7 @@ static void android_media_MediaDrm_native_finalize(
 }
 
 static jboolean android_media_MediaDrm_isCryptoSchemeSupportedNative(
-        JNIEnv *env, jobject thiz, jbyteArray uuidObj) {
+    JNIEnv *env, jobject thiz, jbyteArray uuidObj, jstring jmimeType) {
 
     if (uuidObj == NULL) {
         jniThrowException(env, "java/lang/IllegalArgumentException", NULL);
@@ -625,7 +630,12 @@ static jboolean android_media_MediaDrm_isCryptoSchemeSupportedNative(
         return false;
     }
 
-    return JDrm::IsCryptoSchemeSupported(uuid.array());
+    String8 mimeType;
+    if (jmimeType != NULL) {
+        mimeType = JStringToString8(env, jmimeType);
+    }
+
+    return JDrm::IsCryptoSchemeSupported(uuid.array(), mimeType);
 }
 
 static jbyteArray android_media_MediaDrm_openSession(
@@ -750,7 +760,9 @@ static jbyteArray android_media_MediaDrm_provideKeyResponse(
 
     status_t err = drm->provideKeyResponse(sessionId, response, keySetId);
 
-    throwExceptionAsNecessary(env, err, "Failed to handle key response");
+    if (throwExceptionAsNecessary(env, err, "Failed to handle key response")) {
+        return NULL;
+    }
     return VectorToJByteArray(env, keySetId);
 }
 
@@ -1101,7 +1113,9 @@ static jbyteArray android_media_MediaDrm_encryptNative(
 
     status_t err = drm->encrypt(sessionId, keyId, input, iv, output);
 
-    throwExceptionAsNecessary(env, err, "Failed to encrypt");
+    if (throwExceptionAsNecessary(env, err, "Failed to encrypt")) {
+        return NULL;
+    }
 
     return VectorToJByteArray(env, output);
 }
@@ -1129,7 +1143,9 @@ static jbyteArray android_media_MediaDrm_decryptNative(
     Vector<uint8_t> output;
 
     status_t err = drm->decrypt(sessionId, keyId, input, iv, output);
-    throwExceptionAsNecessary(env, err, "Failed to decrypt");
+    if (throwExceptionAsNecessary(env, err, "Failed to decrypt")) {
+        return NULL;
+    }
 
     return VectorToJByteArray(env, output);
 }
@@ -1157,7 +1173,9 @@ static jbyteArray android_media_MediaDrm_signNative(
 
     status_t err = drm->sign(sessionId, keyId, message, signature);
 
-    throwExceptionAsNecessary(env, err, "Failed to sign");
+    if (throwExceptionAsNecessary(env, err, "Failed to sign")) {
+        return NULL;
+    }
 
     return VectorToJByteArray(env, signature);
 }
@@ -1201,7 +1219,7 @@ static JNINativeMethod gMethods[] = {
     { "native_finalize", "()V",
       (void *)android_media_MediaDrm_native_finalize },
 
-    { "isCryptoSchemeSupportedNative", "([B)Z",
+    { "isCryptoSchemeSupportedNative", "([BLjava/lang/String;)Z",
       (void *)android_media_MediaDrm_isCryptoSchemeSupportedNative },
 
     { "openSession", "()[B",

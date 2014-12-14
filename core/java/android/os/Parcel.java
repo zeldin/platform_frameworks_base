@@ -17,6 +17,7 @@
 package android.os;
 
 import android.text.TextUtils;
+import android.util.ArrayMap;
 import android.util.Log;
 import android.util.SparseArray;
 import android.util.SparseBooleanArray;
@@ -177,10 +178,11 @@ import java.util.Set;
  */
 public final class Parcel {
     private static final boolean DEBUG_RECYCLE = false;
+    private static final boolean DEBUG_ARRAY_MAP = false;
     private static final String TAG = "Parcel";
 
     @SuppressWarnings({"UnusedDeclaration"})
-    private int mNativePtr; // used by native code
+    private long mNativePtr; // used by native code
 
     /**
      * Flag indicating if {@link #mNativePtr} was allocated by this object,
@@ -227,49 +229,50 @@ public final class Parcel {
     private static final int EX_ILLEGAL_ARGUMENT = -3;
     private static final int EX_NULL_POINTER = -4;
     private static final int EX_ILLEGAL_STATE = -5;
+    private static final int EX_NETWORK_MAIN_THREAD = -6;
     private static final int EX_HAS_REPLY_HEADER = -128;  // special; see below
 
-    private static native int nativeDataSize(int nativePtr);
-    private static native int nativeDataAvail(int nativePtr);
-    private static native int nativeDataPosition(int nativePtr);
-    private static native int nativeDataCapacity(int nativePtr);
-    private static native void nativeSetDataSize(int nativePtr, int size);
-    private static native void nativeSetDataPosition(int nativePtr, int pos);
-    private static native void nativeSetDataCapacity(int nativePtr, int size);
+    private static native int nativeDataSize(long nativePtr);
+    private static native int nativeDataAvail(long nativePtr);
+    private static native int nativeDataPosition(long nativePtr);
+    private static native int nativeDataCapacity(long nativePtr);
+    private static native void nativeSetDataSize(long nativePtr, int size);
+    private static native void nativeSetDataPosition(long nativePtr, int pos);
+    private static native void nativeSetDataCapacity(long nativePtr, int size);
 
-    private static native boolean nativePushAllowFds(int nativePtr, boolean allowFds);
-    private static native void nativeRestoreAllowFds(int nativePtr, boolean lastValue);
+    private static native boolean nativePushAllowFds(long nativePtr, boolean allowFds);
+    private static native void nativeRestoreAllowFds(long nativePtr, boolean lastValue);
 
-    private static native void nativeWriteByteArray(int nativePtr, byte[] b, int offset, int len);
-    private static native void nativeWriteInt(int nativePtr, int val);
-    private static native void nativeWriteLong(int nativePtr, long val);
-    private static native void nativeWriteFloat(int nativePtr, float val);
-    private static native void nativeWriteDouble(int nativePtr, double val);
-    private static native void nativeWriteString(int nativePtr, String val);
-    private static native void nativeWriteStrongBinder(int nativePtr, IBinder val);
-    private static native void nativeWriteFileDescriptor(int nativePtr, FileDescriptor val);
+    private static native void nativeWriteByteArray(long nativePtr, byte[] b, int offset, int len);
+    private static native void nativeWriteInt(long nativePtr, int val);
+    private static native void nativeWriteLong(long nativePtr, long val);
+    private static native void nativeWriteFloat(long nativePtr, float val);
+    private static native void nativeWriteDouble(long nativePtr, double val);
+    private static native void nativeWriteString(long nativePtr, String val);
+    private static native void nativeWriteStrongBinder(long nativePtr, IBinder val);
+    private static native void nativeWriteFileDescriptor(long nativePtr, FileDescriptor val);
 
-    private static native byte[] nativeCreateByteArray(int nativePtr);
-    private static native int nativeReadInt(int nativePtr);
-    private static native long nativeReadLong(int nativePtr);
-    private static native float nativeReadFloat(int nativePtr);
-    private static native double nativeReadDouble(int nativePtr);
-    private static native String nativeReadString(int nativePtr);
-    private static native IBinder nativeReadStrongBinder(int nativePtr);
-    private static native FileDescriptor nativeReadFileDescriptor(int nativePtr);
+    private static native byte[] nativeCreateByteArray(long nativePtr);
+    private static native int nativeReadInt(long nativePtr);
+    private static native long nativeReadLong(long nativePtr);
+    private static native float nativeReadFloat(long nativePtr);
+    private static native double nativeReadDouble(long nativePtr);
+    private static native String nativeReadString(long nativePtr);
+    private static native IBinder nativeReadStrongBinder(long nativePtr);
+    private static native FileDescriptor nativeReadFileDescriptor(long nativePtr);
 
-    private static native int nativeCreate();
-    private static native void nativeFreeBuffer(int nativePtr);
-    private static native void nativeDestroy(int nativePtr);
+    private static native long nativeCreate();
+    private static native void nativeFreeBuffer(long nativePtr);
+    private static native void nativeDestroy(long nativePtr);
 
-    private static native byte[] nativeMarshall(int nativePtr);
+    private static native byte[] nativeMarshall(long nativePtr);
     private static native void nativeUnmarshall(
-            int nativePtr, byte[] data, int offest, int length);
+            long nativePtr, byte[] data, int offest, int length);
     private static native void nativeAppendFrom(
-            int thisNativePtr, int otherNativePtr, int offset, int length);
-    private static native boolean nativeHasFileDescriptors(int nativePtr);
-    private static native void nativeWriteInterfaceToken(int nativePtr, String interfaceName);
-    private static native void nativeEnforceInterface(int nativePtr, String interfaceName);
+            long thisNativePtr, long otherNativePtr, int offset, int length);
+    private static native boolean nativeHasFileDescriptors(long nativePtr);
+    private static native void nativeWriteInterfaceToken(long nativePtr, String interfaceName);
+    private static native void nativeEnforceInterface(long nativePtr, String interfaceName);
 
     public final static Parcelable.Creator<String> STRING_CREATOR
              = new Parcelable.Creator<String>() {
@@ -572,7 +575,7 @@ public final class Parcel {
      * allows you to avoid mysterious type errors at the point of marshalling.
      */
     public final void writeMap(Map val) {
-        writeMapInternal((Map<String,Object>) val);
+        writeMapInternal((Map<String, Object>) val);
     }
 
     /**
@@ -589,6 +592,34 @@ public final class Parcel {
         for (Map.Entry<String,Object> e : entries) {
             writeValue(e.getKey());
             writeValue(e.getValue());
+        }
+    }
+
+    /**
+     * Flatten an ArrayMap into the parcel at the current dataPosition(),
+     * growing dataCapacity() if needed.  The Map keys must be String objects.
+     */
+    /* package */ void writeArrayMapInternal(ArrayMap<String,Object> val) {
+        if (val == null) {
+            writeInt(-1);
+            return;
+        }
+        final int N = val.size();
+        writeInt(N);
+        if (DEBUG_ARRAY_MAP) {
+            RuntimeException here =  new RuntimeException("here");
+            here.fillInStackTrace();
+            Log.d(TAG, "Writing " + N + " ArrayMap entries", here);
+        }
+        int startPos;
+        for (int i=0; i<N; i++) {
+            if (DEBUG_ARRAY_MAP) startPos = dataPosition();
+            writeValue(val.keyAt(i));
+            writeValue(val.valueAt(i));
+            if (DEBUG_ARRAY_MAP) Log.d(TAG, "  Write #" + i + " "
+                    + (dataPosition()-startPos) + " bytes: key=0x"
+                    + Integer.toHexString(val.keyAt(i) != null ? val.keyAt(i).hashCode() : 0)
+                    + " " + val.keyAt(i));
         }
     }
 
@@ -1215,9 +1246,6 @@ public final class Parcel {
         } else if (v instanceof Parcelable[]) {
             writeInt(VAL_PARCELABLEARRAY);
             writeParcelableArray((Parcelable[]) v, 0);
-        } else if (v instanceof Object[]) {
-            writeInt(VAL_OBJECTARRAY);
-            writeArray((Object[]) v);
         } else if (v instanceof int[]) {
             writeInt(VAL_INTARRAY);
             writeIntArray((int[]) v);
@@ -1227,12 +1255,20 @@ public final class Parcel {
         } else if (v instanceof Byte) {
             writeInt(VAL_BYTE);
             writeInt((Byte) v);
-        } else if (v instanceof Serializable) {
-            // Must be last
-            writeInt(VAL_SERIALIZABLE);
-            writeSerializable((Serializable) v);
         } else {
-            throw new RuntimeException("Parcel: unable to marshal value " + v);
+            Class<?> clazz = v.getClass();
+            if (clazz.isArray() && clazz.getComponentType() == Object.class) {
+                // Only pure Object[] are written here, Other arrays of non-primitive types are
+                // handled by serialization as this does not record the component type.
+                writeInt(VAL_OBJECTARRAY);
+                writeArray((Object[]) v);
+            } else if (v instanceof Serializable) {
+                // Must be last
+                writeInt(VAL_SERIALIZABLE);
+                writeSerializable((Serializable) v);
+            } else {
+                throw new RuntimeException("Parcel: unable to marshal value " + v);
+            }
         }
     }
 
@@ -1303,6 +1339,7 @@ public final class Parcel {
      * <li>{@link IllegalStateException}
      * <li>{@link NullPointerException}
      * <li>{@link SecurityException}
+     * <li>{@link NetworkOnMainThreadException}
      * </ul>
      * 
      * @param e The Exception to be written.
@@ -1322,6 +1359,8 @@ public final class Parcel {
             code = EX_NULL_POINTER;
         } else if (e instanceof IllegalStateException) {
             code = EX_ILLEGAL_STATE;
+        } else if (e instanceof NetworkOnMainThreadException) {
+            code = EX_NETWORK_MAIN_THREAD;
         }
         writeInt(code);
         StrictMode.clearGatheredViolations();
@@ -1420,10 +1459,11 @@ public final class Parcel {
     }
 
     /**
-     * Use this function for customized exception handling.
-     * customized method call this method for all unknown case
-     * @param code exception code
-     * @param msg exception message
+     * Throw an exception with the given message. Not intended for use
+     * outside the Parcel class.
+     *
+     * @param code Used to determine which exception class to throw.
+     * @param msg The exception message.
      */
     public final void readException(int code, String msg) {
         switch (code) {
@@ -1437,6 +1477,8 @@ public final class Parcel {
                 throw new NullPointerException(msg);
             case EX_ILLEGAL_STATE:
                 throw new IllegalStateException(msg);
+            case EX_NETWORK_MAIN_THREAD:
+                throw new NetworkOnMainThreadException();
         }
         throw new RuntimeException("Unknown exception code: " + code
                 + " msg " + msg);
@@ -1500,6 +1542,11 @@ public final class Parcel {
     public final ParcelFileDescriptor readFileDescriptor() {
         FileDescriptor fd = nativeReadFileDescriptor(mNativePtr);
         return fd != null ? new ParcelFileDescriptor(fd) : null;
+    }
+
+    /** {@hide} */
+    public final FileDescriptor readRawFileDescriptor() {
+        return nativeReadFileDescriptor(mNativePtr);
     }
 
     /*package*/ static native FileDescriptor openFileDescriptor(String file,
@@ -1573,6 +1620,7 @@ public final class Parcel {
     public final Bundle readBundle(ClassLoader loader) {
         int length = readInt();
         if (length < 0) {
+            if (Bundle.DEBUG) Log.d(TAG, "null bundle: length=" + length);
             return null;
         }
         
@@ -2187,6 +2235,11 @@ public final class Parcel {
         mCreators = new HashMap<ClassLoader,HashMap<String,Parcelable.Creator>>();
 
     static protected final Parcel obtain(int obj) {
+        throw new UnsupportedOperationException();
+    }
+
+    /** @hide */
+    static protected final Parcel obtain(long obj) {
         final Parcel[] pool = sHolderPool;
         synchronized (pool) {
             Parcel p;
@@ -2205,7 +2258,7 @@ public final class Parcel {
         return new Parcel(obj);
     }
 
-    private Parcel(int nativePtr) {
+    private Parcel(long nativePtr) {
         if (DEBUG_RECYCLE) {
             mStack = new RuntimeException();
         }
@@ -2213,7 +2266,7 @@ public final class Parcel {
         init(nativePtr);
     }
 
-    private void init(int nativePtr) {
+    private void init(long nativePtr) {
         if (nativePtr != 0) {
             mNativePtr = nativePtr;
             mOwnsNativeParcelObject = false;
@@ -2252,6 +2305,43 @@ public final class Parcel {
         ClassLoader loader) {
         while (N > 0) {
             Object key = readValue(loader);
+            Object value = readValue(loader);
+            outVal.put(key, value);
+            N--;
+        }
+    }
+
+    /* package */ void readArrayMapInternal(ArrayMap outVal, int N,
+        ClassLoader loader) {
+        if (DEBUG_ARRAY_MAP) {
+            RuntimeException here =  new RuntimeException("here");
+            here.fillInStackTrace();
+            Log.d(TAG, "Reading " + N + " ArrayMap entries", here);
+        }
+        int startPos;
+        while (N > 0) {
+            if (DEBUG_ARRAY_MAP) startPos = dataPosition();
+            Object key = readValue(loader);
+            Object value = readValue(loader);
+            if (DEBUG_ARRAY_MAP) Log.d(TAG, "  Read #" + (N-1) + " "
+                    + (dataPosition()-startPos) + " bytes: key=0x"
+                    + Integer.toHexString((key != null ? key.hashCode() : 0)) + " " + key);
+            outVal.append(key, value);
+            N--;
+        }
+    }
+
+    /* package */ void readArrayMapSafelyInternal(ArrayMap outVal, int N,
+        ClassLoader loader) {
+        if (DEBUG_ARRAY_MAP) {
+            RuntimeException here =  new RuntimeException("here");
+            here.fillInStackTrace();
+            Log.d(TAG, "Reading safely " + N + " ArrayMap entries", here);
+        }
+        while (N > 0) {
+            Object key = readValue(loader);
+            if (DEBUG_ARRAY_MAP) Log.d(TAG, "  Read safe #" + (N-1) + ": key=0x"
+                    + (key != null ? key.hashCode() : 0) + " " + key);
             Object value = readValue(loader);
             outVal.put(key, value);
             N--;

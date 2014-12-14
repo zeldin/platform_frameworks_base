@@ -64,7 +64,7 @@ public class Html {
      */
     public static interface ImageGetter {
         /**
-         * This methos is called when the HTML parser encounters an
+         * This method is called when the HTML parser encounters an
          * &lt;img&gt; tag.  The <code>source</code> argument is the
          * string from the "src" attribute; the return value should be
          * a Drawable representation of the image or <code>null</code>
@@ -391,6 +391,15 @@ public class Html {
                 out.append("&gt;");
             } else if (c == '&') {
                 out.append("&amp;");
+            } else if (c >= 0xD800 && c <= 0xDFFF) {
+                if (c < 0xDC00 && i + 1 < end) {
+                    char d = text.charAt(i + 1);
+                    if (d >= 0xDC00 && d <= 0xDFFF) {
+                        i++;
+                        int codepoint = 0x010000 | (int) c - 0xD800 << 10 | (int) d - 0xDC00;
+                        out.append("&#").append(codepoint).append(";");
+                    }
+                }
             } else if (c > 0x7E || c < ' ') {
                 out.append("&#").append((int) c).append(";");
             } else if (c == ' ') {

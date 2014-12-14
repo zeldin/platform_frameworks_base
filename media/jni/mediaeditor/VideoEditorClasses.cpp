@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+#define LOG_TAG "VideoEditorClasses"
 
 #include <VideoEditorClasses.h>
 #include <VideoEditorJava.h>
@@ -608,7 +609,7 @@ VIDEOEDIT_JAVA_DEFINE_FIELD_CLASS(EffectSettings, EFFECT_SETTINGS_CLASS_NAME)
 
 VIDEOEDIT_JAVA_DEFINE_FIELDS(Engine)
 {
-    VIDEOEDIT_JAVA_FIELD_INIT("mManualEditContext", "I")
+    VIDEOEDIT_JAVA_FIELD_INIT("mManualEditContext", "J")
 };
 
 VIDEOEDIT_JAVA_DEFINE_FIELD_CLASS(Engine, MANUAL_EDIT_ENGINE_CLASS_NAME)
@@ -3095,7 +3096,7 @@ videoEditClasses_getContext(
     if (*pResult)
     {
         // Retrieve the context pointer.
-        pContext = (void *)pEnv->GetIntField(object, fieldIds.context);
+        pContext = (void *)pEnv->GetLongField(object, fieldIds.context);
     }
 
     // Return the context pointer.
@@ -3131,15 +3132,15 @@ videoEditClasses_setContext(
     {
         // Set the context field.
         VIDEOEDIT_LOG_FUNCTION(ANDROID_LOG_INFO, "VIDEO_EDITOR_CLASSES",
-                        "The context value from JAVA before setting is = 0x%x",
-                        pEnv->GetIntField(object, fieldIds.context));
+                        "The context value from JAVA before setting is = %p",
+                        (void *)pEnv->GetLongField(object, fieldIds.context));
 
-        pEnv->SetIntField(object, fieldIds.context, (int)pContext);
-        M4OSA_TRACE1_1("The context value in JNI is = 0x%x",pContext);
+        pEnv->SetLongField(object, fieldIds.context, (jlong)pContext);
+        M4OSA_TRACE1_1("The context value in JNI is = %p",pContext);
 
         VIDEOEDIT_LOG_FUNCTION(ANDROID_LOG_INFO, "VIDEO_EDITOR_CLASSES",
-                         "The context value from JAVA after setting is = 0x%x",
-                         pEnv->GetIntField(object, fieldIds.context));
+                         "The context value from JAVA after setting is = %p",
+                         (void *)pEnv->GetLongField(object, fieldIds.context));
     }
 }
 

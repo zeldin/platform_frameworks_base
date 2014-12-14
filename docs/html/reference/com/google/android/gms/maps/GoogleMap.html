@@ -73,12 +73,14 @@
 
 
 
+
+
 <html>
 <head>
 
 
-
-<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+<meta name="viewport" content="width=device-width" />
 
 <link rel="shortcut icon" type="image/x-icon" href="/favicon.ico" />
 <title>GoogleMap | Android Developers</title>
@@ -95,6 +97,7 @@ href="//fonts.googleapis.com/css?family=Roboto:regular,medium,thin,italic,medium
 <script src="/assets/js/android_3p-bundle.js" type="text/javascript"></script>
 <script type="text/javascript">
   var toRoot = "/";
+  var metaTags = [];
   var devsite = false;
 </script>
 <script src="/assets/js/docs.js" type="text/javascript"></script>
@@ -239,6 +242,8 @@ onkeyup="return search_changed(event, false, '/')" />
       </div>
       <div class="child-card training no-display">
       </div>
+      <div class="child-card samples no-display">
+      </div>
     </div>
     <div class="suggest-card design no-display">
       <ul class="search_filtered">
@@ -277,7 +282,7 @@ onkeyup="return search_changed(event, false, '/')" />
                           ja-lang="トレーニング"
                           es-lang="Capacitación"               
                           >Training</a></li>
-                        <li><a href="/guide/components/index.html"
+                        <li><a href="/guide/index.html"
                           zh-tw-lang="API 指南"
                           zh-cn-lang="API 指南"
                           ru-lang="Руководства по API"
@@ -305,6 +310,10 @@ onkeyup="return search_changed(event, false, '/')" />
                         </li>
                         <li><a href="/google/index.html">Google Services</a>
                         </li>
+                        
+                          <li><a href="/samples/index.html">Samples</a>
+                          </li>
+                        
                       </ul>
                     </li>
                     <li class="distribute last">
@@ -344,7 +353,7 @@ onkeyup="return search_changed(event, false, '/')" />
                   ja-lang="トレーニング"
                   es-lang="Capacitación"               
                   >Training</a></li>
-                <li class="guide"><a href="/guide/components/index.html"
+                <li class="guide"><a href="/guide/index.html"
                   zh-tw-lang="API 指南"
                   zh-cn-lang="API 指南"
                   ru-lang="Руководства по API"
@@ -371,6 +380,11 @@ onkeyup="return search_changed(event, false, '/')" />
                 <li class="google"><a href="/google/index.html"
                   >Google Services</a>
                 </li>
+                
+                  <li class="samples"><a href="/samples/index.html"
+                    >Samples</a>
+                  </li>
+                
             </ul>
         </div>
         
@@ -417,15 +431,34 @@ onkeyup="return search_changed(event, false, '/')" />
   </li>
   <li class="nav-section">
     <div class="nav-section-header empty"><a href="/google/play-services/maps.html">
-          <span class="en">Google Maps</span>
+          <span class="en">Maps</span>
       </a></div>
   </li>
   <li class="nav-section">
-    <div class="nav-section-header empty"><a href="/google/play-services/auth.html">
-          <span class="en">Authorization</span>
+    <div class="nav-section-header empty"><a href="/google/play-services/drive.html">
+          <span class="en">Drive</span>
       </a></div>
   </li>
-
+  <li class="nav-section">
+    <div class="nav-section-header empty"><a href="/google/play-services/cast.html">
+          <span class="en">Cast</span>
+      </a></div>
+  </li>
+  <li class="nav-section">
+    <div class="nav-section-header"><a href="/google/play-services/ads.html">
+      <span class="en">Ads</span></a>
+    </div>
+    <ul>
+      <li><a href="/google/play-services/id.html">
+          <span class="en">Advertising ID</span></a>
+      </li>
+    </ul>
+  </li>
+  <li class="nav-section">
+    <div class="nav-section-header empty"><a href="/google/play-services/wallet.html">
+          <span class="en">Wallet</span>
+      </a></div>
+  </li>
 
 
   <li class="nav-section">
@@ -435,6 +468,18 @@ onkeyup="return search_changed(event, false, '/')" />
     <ul>
       <li><a href="/google/play-services/setup.html">
           <span class="en">Setup</span></a>
+      </li>
+      <li class="nav-section">
+        <div class="nav-section-header"><a href="/google/auth/api-client.html">
+          <span class="en">Accessing Google Play Services APIs</span></a>
+        </div>
+        <ul>
+          <li>
+            <a href="/google/auth/http-auth.html">
+              <span class="en">Authorizing with Google for REST APIs</span>
+            </a>
+          </li>
+        </ul>
       </li>
       <li id="gms-tree-list" class="nav-section">
         <div class="nav-section-header">
@@ -498,28 +543,31 @@ onkeyup="return search_changed(event, false, '/')" />
 
 
 
-  <li class="nav-section">
+   <li class="nav-section">
       <div class="nav-section-header"><a href="/google/gcm/index.html">
         <span class="en">Google Cloud Messaging</span></a>
       </div>
       <ul>
+        <li><a href="/google/gcm/gcm.html">
+            <span class="en">Overview</span></a>
+        </li>
         <li><a href="/google/gcm/gs.html">
             <span class="en">Getting Started</span></a>
         </li>
-        <li><a href="/google/gcm/gcm.html">
-            <span class="en">Architectural Overview</span></a>
+        <li><a href="/google/gcm/client.html">
+            <span class="en">Implementing GCM Client</span></a>
         </li>
-         <li><a href="/google/gcm/ccs.html">
-              <span class="en">Cloud Connection Server</span></a>
+        <li class="nav-section"><div class="nav-section-header"><a href="/google/gcm/server.html">
+              <span class="en">Implementing GCM Server</span></a></div>
+              <ul>
+              <li><a href="/google/gcm/ccs.html">
+              <span class="en">CCS (XMPP)</span></a></li>
+              <li><a href="/google/gcm/http.html">
+              <span class="en">HTTP</span></a></li>
+              </ul>
         </li>
         <li><a href="/google/gcm/notifications.html">
               <span class="en">User Notifications</span></a>
-        </li>
-        <li><a href="/google/gcm/client.html">
-            <span class="en">GCM Client</span></a>
-        </li>
-        <li><a href="/google/gcm/server.html">
-            <span class="en">GCM Server</span></a>
         </li>
         <li><a href="/google/gcm/adv.html">
             <span class="en">Advanced Topics</span></a>
@@ -844,12 +892,24 @@ Summary:
          
         
         interface</nobr></td>
+      <td class="jd-linkcol"><a href="/reference/com/google/android/gms/maps/GoogleMap.OnMapLoadedCallback.html">GoogleMap.OnMapLoadedCallback</a></td>
+      <td class="jd-descrcol" width="100%">Callback interface for when the map has finished rendering.&nbsp;</td>
+    </tr>
+    
+    
+    <tr class="alt-color api apilevel-" >
+      <td class="jd-typecol"><nobr>
+        
+         
+         
+        
+        interface</nobr></td>
       <td class="jd-linkcol"><a href="/reference/com/google/android/gms/maps/GoogleMap.OnMapLongClickListener.html">GoogleMap.OnMapLongClickListener</a></td>
       <td class="jd-descrcol" width="100%">Callback interface for when the user long presses on the map.&nbsp;</td>
     </tr>
     
     
-    <tr class="alt-color api apilevel-" >
+    <tr class=" api apilevel-" >
       <td class="jd-typecol"><nobr>
         
          
@@ -861,7 +921,7 @@ Summary:
     </tr>
     
     
-    <tr class=" api apilevel-" >
+    <tr class="alt-color api apilevel-" >
       <td class="jd-typecol"><nobr>
         
          
@@ -870,6 +930,18 @@ Summary:
         interface</nobr></td>
       <td class="jd-linkcol"><a href="/reference/com/google/android/gms/maps/GoogleMap.OnMarkerDragListener.html">GoogleMap.OnMarkerDragListener</a></td>
       <td class="jd-descrcol" width="100%">Callback interface for drag events on markers.&nbsp;</td>
+    </tr>
+    
+    
+    <tr class=" api apilevel-" >
+      <td class="jd-typecol"><nobr>
+        
+         
+         
+        
+        interface</nobr></td>
+      <td class="jd-linkcol"><a href="/reference/com/google/android/gms/maps/GoogleMap.OnMyLocationButtonClickListener.html">GoogleMap.OnMyLocationButtonClickListener</a></td>
+      <td class="jd-descrcol" width="100%">Callback interface for when the My Location button is clicked.&nbsp;</td>
     </tr>
     
     
@@ -890,6 +962,18 @@ Summary:
  <a href="https://developers.google.com/maps/documentation/android/map/location">
  Location Developer Guide</a>.
 </em>&nbsp;</td>
+    </tr>
+    
+    
+    <tr class=" api apilevel-" >
+      <td class="jd-typecol"><nobr>
+        
+         
+         
+        
+        interface</nobr></td>
+      <td class="jd-linkcol"><a href="/reference/com/google/android/gms/maps/GoogleMap.SnapshotReadyCallback.html">GoogleMap.SnapshotReadyCallback</a></td>
+      <td class="jd-descrcol" width="100%">Callback interface to notify when the snapshot has been taken.&nbsp;</td>
     </tr>
     
     
@@ -1298,6 +1382,24 @@ Summary:
             boolean</nobr>
         </td>
         <td class="jd-linkcol" width="100%"><nobr>
+        <span class="sympad"><a href="/reference/com/google/android/gms/maps/GoogleMap.html#isBuildingsEnabled()">isBuildingsEnabled</a></span>()</nobr>
+        
+        <div class="jd-descrdiv">Returns whether 3D buildings layer is enabled.</div>
+  
+  </td></tr>
+
+
+	 
+    <tr class="alt-color api apilevel-" >
+        <td class="jd-typecol"><nobr>
+            
+            
+            final
+            
+            
+            boolean</nobr>
+        </td>
+        <td class="jd-linkcol" width="100%"><nobr>
         <span class="sympad"><a href="/reference/com/google/android/gms/maps/GoogleMap.html#isIndoorEnabled()">isIndoorEnabled</a></span>()</nobr>
         
         <div class="jd-descrdiv">Gets whether indoor maps are currently enabled.</div>
@@ -1306,7 +1408,7 @@ Summary:
 
 
 	 
-    <tr class="alt-color api apilevel-" >
+    <tr class=" api apilevel-" >
         <td class="jd-typecol"><nobr>
             
             
@@ -1324,7 +1426,7 @@ Summary:
 
 
 	 
-    <tr class=" api apilevel-" >
+    <tr class="alt-color api apilevel-" >
         <td class="jd-typecol"><nobr>
             
             
@@ -1342,7 +1444,7 @@ Summary:
 
 
 	 
-    <tr class="alt-color api apilevel-" >
+    <tr class=" api apilevel-" >
         <td class="jd-typecol"><nobr>
             
             
@@ -1355,6 +1457,24 @@ Summary:
         <span class="sympad"><a href="/reference/com/google/android/gms/maps/GoogleMap.html#moveCamera(com.google.android.gms.maps.CameraUpdate)">moveCamera</a></span>(<a href="/reference/com/google/android/gms/maps/CameraUpdate.html">CameraUpdate</a> update)</nobr>
         
         <div class="jd-descrdiv">Repositions the camera according to the instructions defined in the update.</div>
+  
+  </td></tr>
+
+
+	 
+    <tr class="alt-color api apilevel-" >
+        <td class="jd-typecol"><nobr>
+            
+            
+            final
+            
+            
+            void</nobr>
+        </td>
+        <td class="jd-linkcol" width="100%"><nobr>
+        <span class="sympad"><a href="/reference/com/google/android/gms/maps/GoogleMap.html#setBuildingsEnabled(boolean)">setBuildingsEnabled</a></span>(boolean enabled)</nobr>
+        
+        <div class="jd-descrdiv">Turns the 3D buildings layer on or off.</div>
   
   </td></tr>
 
@@ -1508,6 +1628,24 @@ Summary:
         <td class="jd-typecol"><nobr>
             
             
+            
+            
+            
+            void</nobr>
+        </td>
+        <td class="jd-linkcol" width="100%"><nobr>
+        <span class="sympad"><a href="/reference/com/google/android/gms/maps/GoogleMap.html#setOnMapLoadedCallback(com.google.android.gms.maps.GoogleMap.OnMapLoadedCallback)">setOnMapLoadedCallback</a></span>(<a href="/reference/com/google/android/gms/maps/GoogleMap.OnMapLoadedCallback.html">GoogleMap.OnMapLoadedCallback</a> callback)</nobr>
+        
+        <div class="jd-descrdiv">Sets a callback that is invoked when this map has finished rendering.</div>
+  
+  </td></tr>
+
+
+	 
+    <tr class="alt-color api apilevel-" >
+        <td class="jd-typecol"><nobr>
+            
+            
             final
             
             
@@ -1522,7 +1660,7 @@ Summary:
 
 
 	 
-    <tr class="alt-color api apilevel-" >
+    <tr class=" api apilevel-" >
         <td class="jd-typecol"><nobr>
             
             
@@ -1540,7 +1678,7 @@ Summary:
 
 
 	 
-    <tr class=" api apilevel-" >
+    <tr class="alt-color api apilevel-" >
         <td class="jd-typecol"><nobr>
             
             
@@ -1553,6 +1691,24 @@ Summary:
         <span class="sympad"><a href="/reference/com/google/android/gms/maps/GoogleMap.html#setOnMarkerDragListener(com.google.android.gms.maps.GoogleMap.OnMarkerDragListener)">setOnMarkerDragListener</a></span>(<a href="/reference/com/google/android/gms/maps/GoogleMap.OnMarkerDragListener.html">GoogleMap.OnMarkerDragListener</a> listener)</nobr>
         
         <div class="jd-descrdiv">Sets a callback that's invoked when a marker is dragged.</div>
+  
+  </td></tr>
+
+
+	 
+    <tr class=" api apilevel-" >
+        <td class="jd-typecol"><nobr>
+            
+            
+            final
+            
+            
+            void</nobr>
+        </td>
+        <td class="jd-linkcol" width="100%"><nobr>
+        <span class="sympad"><a href="/reference/com/google/android/gms/maps/GoogleMap.html#setOnMyLocationButtonClickListener(com.google.android.gms.maps.GoogleMap.OnMyLocationButtonClickListener)">setOnMyLocationButtonClickListener</a></span>(<a href="/reference/com/google/android/gms/maps/GoogleMap.OnMyLocationButtonClickListener.html">GoogleMap.OnMyLocationButtonClickListener</a> listener)</nobr>
+        
+        <div class="jd-descrdiv">Sets a callback that's invoked when the my location button is clicked.</div>
   
   </td></tr>
 
@@ -1594,15 +1750,69 @@ Summary:
             void</nobr>
         </td>
         <td class="jd-linkcol" width="100%"><nobr>
-        <span class="sympad"><a href="/reference/com/google/android/gms/maps/GoogleMap.html#setTrafficEnabled(boolean)">setTrafficEnabled</a></span>(boolean enabled)</nobr>
+        <span class="sympad"><a href="/reference/com/google/android/gms/maps/GoogleMap.html#setPadding(int, int, int, int)">setPadding</a></span>(int left, int top, int right, int bottom)</nobr>
         
-        <div class="jd-descrdiv">Toggles the traffic layer on or off.</div>
+        <div class="jd-descrdiv">Sets padding on the map.</div>
   
   </td></tr>
 
 
 	 
     <tr class="alt-color api apilevel-" >
+        <td class="jd-typecol"><nobr>
+            
+            
+            final
+            
+            
+            void</nobr>
+        </td>
+        <td class="jd-linkcol" width="100%"><nobr>
+        <span class="sympad"><a href="/reference/com/google/android/gms/maps/GoogleMap.html#setTrafficEnabled(boolean)">setTrafficEnabled</a></span>(boolean enabled)</nobr>
+        
+        <div class="jd-descrdiv">Turns the traffic layer on or off.</div>
+  
+  </td></tr>
+
+
+	 
+    <tr class=" api apilevel-" >
+        <td class="jd-typecol"><nobr>
+            
+            
+            final
+            
+            
+            void</nobr>
+        </td>
+        <td class="jd-linkcol" width="100%"><nobr>
+        <span class="sympad"><a href="/reference/com/google/android/gms/maps/GoogleMap.html#snapshot(com.google.android.gms.maps.GoogleMap.SnapshotReadyCallback, android.graphics.Bitmap)">snapshot</a></span>(<a href="/reference/com/google/android/gms/maps/GoogleMap.SnapshotReadyCallback.html">GoogleMap.SnapshotReadyCallback</a> callback, Bitmap bitmap)</nobr>
+        
+        <div class="jd-descrdiv">Takes a snapshot of the map.</div>
+  
+  </td></tr>
+
+
+	 
+    <tr class="alt-color api apilevel-" >
+        <td class="jd-typecol"><nobr>
+            
+            
+            final
+            
+            
+            void</nobr>
+        </td>
+        <td class="jd-linkcol" width="100%"><nobr>
+        <span class="sympad"><a href="/reference/com/google/android/gms/maps/GoogleMap.html#snapshot(com.google.android.gms.maps.GoogleMap.SnapshotReadyCallback)">snapshot</a></span>(<a href="/reference/com/google/android/gms/maps/GoogleMap.SnapshotReadyCallback.html">GoogleMap.SnapshotReadyCallback</a> callback)</nobr>
+        
+        <div class="jd-descrdiv">Takes a snapshot of the map.</div>
+  
+  </td></tr>
+
+
+	 
+    <tr class=" api apilevel-" >
         <td class="jd-typecol"><nobr>
             
             
@@ -2406,7 +2616,8 @@ From class
             notified with <code><a href="/reference/com/google/android/gms/maps/GoogleMap.CancelableCallback.html#onFinish()">onFinish()</a></code>. If the animation stops due to
             interruption by a later camera movement or a user gesture,
             <code><a href="/reference/com/google/android/gms/maps/GoogleMap.CancelableCallback.html#onCancel()">onCancel()</a></code> will be called. The callback should not
-            attempt to move or animate the camera in its cancellation method.</td>
+            attempt to move or animate the camera in its cancellation method. If a callback
+            isn't required, leave it as <code>null</code>.</td>
         </tr>
       </table>
   </div>
@@ -2808,6 +3019,40 @@ From class
 </div>
 
 
+<A NAME="isBuildingsEnabled()"></A>
+
+<div class="jd-details api apilevel-"> 
+    <h4 class="jd-details-title">
+      <span class="normal">
+        public 
+         
+        final 
+         
+         
+        boolean
+      </span>
+      <span class="sympad">isBuildingsEnabled</span>
+      <span class="normal">()</span>
+    </h4>
+      <div class="api-level">
+        <div></div>
+        
+  
+
+      </div>
+    <div class="jd-details-descr">
+      
+  <div class="jd-tagdata jd-tagdescr"><p>Returns whether 3D buildings layer is enabled.</p></div>
+  <div class="jd-tagdata">
+      <h5 class="jd-tagtitle">Returns</h5>
+      <ul class="nolist"><li>True if buildings are enabled, false otherwise.
+</li></ul>
+  </div>
+
+    </div>
+</div>
+
+
 <A NAME="isIndoorEnabled()"></A>
 
 <div class="jd-details api apilevel-"> 
@@ -2943,6 +3188,46 @@ From class
         <tr>
           <th>update</td>
           <td>The change that should be applied to the camera.
+</td>
+        </tr>
+      </table>
+  </div>
+
+    </div>
+</div>
+
+
+<A NAME="setBuildingsEnabled(boolean)"></A>
+
+<div class="jd-details api apilevel-"> 
+    <h4 class="jd-details-title">
+      <span class="normal">
+        public 
+         
+        final 
+         
+         
+        void
+      </span>
+      <span class="sympad">setBuildingsEnabled</span>
+      <span class="normal">(boolean enabled)</span>
+    </h4>
+      <div class="api-level">
+        <div></div>
+        
+  
+
+      </div>
+    <div class="jd-details-descr">
+      
+  <div class="jd-tagdata jd-tagdescr"><p>Turns the 3D buildings layer on or off.</p></div>
+  <div class="jd-tagdata">
+      <h5 class="jd-tagtitle">Parameters</h5>
+      <table class="jd-tagtable">
+        <tr>
+          <th>enabled</td>
+          <td><code>true</code> to enable the 3D buildings layer; <code>false</code> to disable 3D
+ buildings.
 </td>
         </tr>
       </table>
@@ -3292,6 +3577,52 @@ From class
 </div>
 
 
+<A NAME="setOnMapLoadedCallback(com.google.android.gms.maps.GoogleMap.OnMapLoadedCallback)"></A>
+
+<div class="jd-details api apilevel-"> 
+    <h4 class="jd-details-title">
+      <span class="normal">
+        public 
+         
+         
+         
+         
+        void
+      </span>
+      <span class="sympad">setOnMapLoadedCallback</span>
+      <span class="normal">(<a href="/reference/com/google/android/gms/maps/GoogleMap.OnMapLoadedCallback.html">GoogleMap.OnMapLoadedCallback</a> callback)</span>
+    </h4>
+      <div class="api-level">
+        <div></div>
+        
+  
+
+      </div>
+    <div class="jd-details-descr">
+      
+  <div class="jd-tagdata jd-tagdescr"><p>Sets a callback that is invoked when this map has finished rendering. The callback will only
+ be invoked once.
+
+ If this method is called when the map is fully rendered, the callback will be invoked
+ immediately. This event will not fire if the map never loads due to connectivity issues, or
+ if the map is continuously changing and never completes loading due to the user constantly
+ interacting with the map.</p></div>
+  <div class="jd-tagdata">
+      <h5 class="jd-tagtitle">Parameters</h5>
+      <table class="jd-tagtable">
+        <tr>
+          <th>callback</td>
+          <td>The callback invoked when the map has finished rendering. To unset the
+     callback, use <code>null</code>.
+</td>
+        </tr>
+      </table>
+  </div>
+
+    </div>
+</div>
+
+
 <A NAME="setOnMapLongClickListener(com.google.android.gms.maps.GoogleMap.OnMapLongClickListener)"></A>
 
 <div class="jd-details api apilevel-"> 
@@ -3412,6 +3743,49 @@ From class
 </div>
 
 
+<A NAME="setOnMyLocationButtonClickListener(com.google.android.gms.maps.GoogleMap.OnMyLocationButtonClickListener)"></A>
+
+<div class="jd-details api apilevel-"> 
+    <h4 class="jd-details-title">
+      <span class="normal">
+        public 
+         
+        final 
+         
+         
+        void
+      </span>
+      <span class="sympad">setOnMyLocationButtonClickListener</span>
+      <span class="normal">(<a href="/reference/com/google/android/gms/maps/GoogleMap.OnMyLocationButtonClickListener.html">GoogleMap.OnMyLocationButtonClickListener</a> listener)</span>
+    </h4>
+      <div class="api-level">
+        <div></div>
+        
+  
+
+      </div>
+    <div class="jd-details-descr">
+      
+  <div class="jd-tagdata jd-tagdescr"><p>Sets a callback that's invoked when the my location button is clicked.
+
+ <p>If the <code>listener</code> returns <code>true</code>, the event is consumed and the default
+ behavior will not occur. If it returns <code>false</code>, the default behavior will occur (i.e.
+ The camera moves such that it is centered on the user's location).</p></div>
+  <div class="jd-tagdata">
+      <h5 class="jd-tagtitle">Parameters</h5>
+      <table class="jd-tagtable">
+        <tr>
+          <th>listener</td>
+          <td>The callback that's invoked when the My Location button is clicked.
+</td>
+        </tr>
+      </table>
+  </div>
+
+    </div>
+</div>
+
+
 <A NAME="setOnMyLocationChangeListener(com.google.android.gms.maps.GoogleMap.OnMyLocationChangeListener)"></A>
 
 <div class="jd-details api apilevel-"> 
@@ -3445,13 +3819,70 @@ From class
  Location Developer Guide</a>.
 
   </p>
-  <div class="jd-tagdata jd-tagdescr"><p>Sets a callback that's invoked when the my location dot changes location.</p></div>
+  <div class="jd-tagdata jd-tagdescr"><p>Sets a callback that's invoked when the My Location dot changes location.</p></div>
   <div class="jd-tagdata">
       <h5 class="jd-tagtitle">Parameters</h5>
       <table class="jd-tagtable">
         <tr>
           <th>listener</td>
-          <td>The callback that's invoked when the my location dot changes.</td>
+          <td>The callback that's invoked when the My Location dot changes.</td>
+        </tr>
+      </table>
+  </div>
+
+    </div>
+</div>
+
+
+<A NAME="setPadding(int, int, int, int)"></A>
+
+<div class="jd-details api apilevel-"> 
+    <h4 class="jd-details-title">
+      <span class="normal">
+        public 
+         
+        final 
+         
+         
+        void
+      </span>
+      <span class="sympad">setPadding</span>
+      <span class="normal">(int left, int top, int right, int bottom)</span>
+    </h4>
+      <div class="api-level">
+        <div></div>
+        
+  
+
+      </div>
+    <div class="jd-details-descr">
+      
+  <div class="jd-tagdata jd-tagdescr"><p>Sets padding on the map.
+
+ <p>This method allows you to define a visible region on the map, to signal to the map that
+ portions of the map around the edges may be obscured, by setting padding on each of the four
+ edges of the map. Map functions will be adapted to the padding. For example, the zoom
+ controls, compass, copyright notices and Google logo will be moved to fit inside the defined
+ region, camera movements will be relative to the center of the visible region, etc.</p></div>
+  <div class="jd-tagdata">
+      <h5 class="jd-tagtitle">Parameters</h5>
+      <table class="jd-tagtable">
+        <tr>
+          <th>left</td>
+          <td>the number of pixels of padding to be added on the left of the map.</td>
+        </tr>
+        <tr>
+          <th>top</td>
+          <td>the number of pixels of padding to be added on the top of the map.</td>
+        </tr>
+        <tr>
+          <th>right</td>
+          <td>the number of pixels of padding to be added on the right of the map.</td>
+        </tr>
+        <tr>
+          <th>bottom</td>
+          <td>the number of pixels of padding to be added on the bottom of the map.
+</td>
         </tr>
       </table>
   </div>
@@ -3483,7 +3914,111 @@ From class
       </div>
     <div class="jd-details-descr">
       
-  <div class="jd-tagdata jd-tagdescr"><p>Toggles the traffic layer on or off. </p></div>
+  <div class="jd-tagdata jd-tagdescr"><p>Turns the traffic layer on or off. </p></div>
+
+    </div>
+</div>
+
+
+<A NAME="snapshot(com.google.android.gms.maps.GoogleMap.SnapshotReadyCallback, android.graphics.Bitmap)"></A>
+
+<div class="jd-details api apilevel-"> 
+    <h4 class="jd-details-title">
+      <span class="normal">
+        public 
+         
+        final 
+         
+         
+        void
+      </span>
+      <span class="sympad">snapshot</span>
+      <span class="normal">(<a href="/reference/com/google/android/gms/maps/GoogleMap.SnapshotReadyCallback.html">GoogleMap.SnapshotReadyCallback</a> callback, Bitmap bitmap)</span>
+    </h4>
+      <div class="api-level">
+        <div></div>
+        
+  
+
+      </div>
+    <div class="jd-details-descr">
+      
+  <div class="jd-tagdata jd-tagdescr"><p>Takes a snapshot of the map.
+
+ <p>This method is equivalent to <code><a href="/reference/com/google/android/gms/maps/GoogleMap.html#snapshot(com.google.android.gms.maps.GoogleMap.SnapshotReadyCallback)">snapshot(SnapshotReadyCallback)</a></code> but lets you
+ provide a preallocated <code><a href="/reference/android/graphics/Bitmap.html">Bitmap</a></code>. If the bitmap does not match the current dimensions of
+ the map, another bitmap will be allocated that fits the map's dimensions.
+
+ <p>Although in most cases the object passed by the callback method is the same as the one
+ given in the parameter to this method, in some cases the returned object can be different
+ (e.g., if the view's dimensions have changed by the time the snapshot is actually taken).
+ Thus, you should only trust the content of the bitmap passed by the callback method.</p></div>
+  <div class="jd-tagdata">
+      <h5 class="jd-tagtitle">Parameters</h5>
+      <table class="jd-tagtable">
+        <tr>
+          <th>callback</td>
+          <td>Callback method invoked when the snapshot is taken.</td>
+        </tr>
+        <tr>
+          <th>bitmap</td>
+          <td>A preallocated bitmap. If <code>null</code>, behaves like
+     <code><a href="/reference/com/google/android/gms/maps/GoogleMap.html#snapshot(com.google.android.gms.maps.GoogleMap.SnapshotReadyCallback)">snapshot(SnapshotReadyCallback)</a></code>.
+</td>
+        </tr>
+      </table>
+  </div>
+
+    </div>
+</div>
+
+
+<A NAME="snapshot(com.google.android.gms.maps.GoogleMap.SnapshotReadyCallback)"></A>
+
+<div class="jd-details api apilevel-"> 
+    <h4 class="jd-details-title">
+      <span class="normal">
+        public 
+         
+        final 
+         
+         
+        void
+      </span>
+      <span class="sympad">snapshot</span>
+      <span class="normal">(<a href="/reference/com/google/android/gms/maps/GoogleMap.SnapshotReadyCallback.html">GoogleMap.SnapshotReadyCallback</a> callback)</span>
+    </h4>
+      <div class="api-level">
+        <div></div>
+        
+  
+
+      </div>
+    <div class="jd-details-descr">
+      
+  <div class="jd-tagdata jd-tagdescr"><p>Takes a snapshot of the map.
+
+ <p>You can use snapshots within your application when an interactive
+ map would be difficult, or impossible, to use. For example, images
+ produced with the <code>snapshot()</code> method can be used to display a
+ thumbnail of the map in your app, or a snapshot in the notification
+ center.
+
+ <p><strong>Note:</strong> Images of the map must not be
+ transmitted to your servers, or otherwise used outside of the
+ application. If you need to send a map to another application or user,
+ send data that allows them to reconstruct the map for the new user
+ instead of a snapshot.</p></div>
+  <div class="jd-tagdata">
+      <h5 class="jd-tagtitle">Parameters</h5>
+      <table class="jd-tagtable">
+        <tr>
+          <th>callback</td>
+          <td>Callback method invoked when the snapshot is taken.
+</td>
+        </tr>
+      </table>
+  </div>
 
     </div>
 </div>

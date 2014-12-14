@@ -112,11 +112,23 @@ public:
     virtual uint8_t* getMappedPointer() const = 0;
 
     /**
-     * Upload the specified rectangle of this pixe buffer as a
+     * Upload the specified rectangle of this pixel buffer as a
      * GL_TEXTURE_2D texture. Calling this method will trigger
      * an unmap() if necessary.
      */
     virtual void upload(uint32_t x, uint32_t y, uint32_t width, uint32_t height, int offset) = 0;
+
+    /**
+     * Upload the specified rectangle of this pixel buffer as a
+     * GL_TEXTURE_2D texture. Calling this method will trigger
+     * an unmap() if necessary.
+     *
+     * This is a convenience function provided to save callers the
+     * trouble of computing the offset parameter.
+     */
+    void upload(uint32_t x, uint32_t y, uint32_t width, uint32_t height) {
+        upload(x, y, width, height, getOffset(x, y));
+    }
 
     /**
      * Returns the width of the render buffer in pixels.
@@ -140,6 +152,13 @@ public:
     }
 
     /**
+     * Returns the offset of a pixel in this pixel buffer, in bytes.
+     */
+    uint32_t getOffset(uint32_t x, uint32_t y) const {
+        return (y * mWidth + x) * formatSize(mFormat);
+    }
+
+    /**
      * Returns the number of bytes per pixel in the specified format.
      *
      * Supported formats:
@@ -153,6 +172,25 @@ public:
             case GL_RGBA:
                 return 4;
         }
+        return 0;
+    }
+
+    /**
+     * Returns the alpha channel offset in the specified format.
+     *
+     * Supported formats:
+     *      GL_ALPHA
+     *      GL_RGBA
+     */
+    static uint32_t formatAlphaOffset(GLenum format) {
+        switch (format) {
+            case GL_ALPHA:
+                return 0;
+            case GL_RGBA:
+                return 3;
+        }
+
+        ALOGE("unsupported format: %d",format);
         return 0;
     }
 

@@ -28,11 +28,11 @@ public class Shader {
      * 
      * @hide 
      */
-    public int native_instance;
+    public long native_instance;
     /**
      * @hide
      */
-    public int native_shader;
+    public long native_shader;
 
     private Matrix mLocalMatrix;
 
@@ -90,7 +90,29 @@ public class Shader {
         }
     }
 
-    private static native void nativeDestructor(int native_shader, int native_skiaShader);
-    private static native void nativeSetLocalMatrix(int native_shader,
-            int native_skiaShader, int matrix_instance);
+    /**
+     * @hide
+     */
+    protected Shader copy() {
+        final Shader copy = new Shader();
+        copyLocalMatrix(copy);
+        return copy;
+    }
+
+    /**
+     * @hide
+     */
+    protected void copyLocalMatrix(Shader dest) {
+        if (mLocalMatrix != null) {
+            final Matrix lm = new Matrix();
+            getLocalMatrix(lm);
+            dest.setLocalMatrix(lm);
+        } else {
+            dest.setLocalMatrix(null);
+        }
+    }
+
+    private static native void nativeDestructor(long native_shader, long native_skiaShader);
+    private static native void nativeSetLocalMatrix(long native_shader,
+            long native_skiaShader, long matrix_instance);
 }

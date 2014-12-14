@@ -16,10 +16,12 @@
 
 package com.android.internal.content;
 
-import android.os.Build;
+import android.content.pm.PackageManager;
 import android.util.Slog;
 
+import java.io.Closeable;
 import java.io.File;
+import java.io.IOException;
 
 /**
  * Native libraries helper.
@@ -31,37 +33,84 @@ public class NativeLibraryHelper {
 
     private static final boolean DEBUG_NATIVE = false;
 
-    private static native long nativeSumNativeBinaries(String file, String cpuAbi, String cpuAbi2);
-
     /**
-     * Sums the size of native binaries in an APK.
+     * A handle to an opened APK. Used as input to the various NativeLibraryHelper
+     * methods. Allows us to scan and parse the APK exactly once instead of doing
+     * it multiple times.
      *
-     * @param apkFile APK file to scan for native libraries
-     * @return size of all native binary files in bytes
+     * @hide
      */
-    public static long sumNativeBinariesLI(File apkFile) {
-        final String cpuAbi = Build.CPU_ABI;
-        final String cpuAbi2 = Build.CPU_ABI2;
-        return nativeSumNativeBinaries(apkFile.getPath(), cpuAbi, cpuAbi2);
+    public static class ApkHandle implements Closeable {
+        final String apkPath;
+        final long apkHandle;
+
+        public static ApkHandle create(String path) throws IOException {
+            final long handle = nativeOpenApk(path);
+            if (handle == 0) {
+                throw new IOException("Unable to open APK: " + path);
+            }
+
+            return new ApkHandle(path, handle);
+        }
+
+        public static ApkHandle create(File path) throws IOException {
+            return create(path.getAbsolutePath());
+        }
+
+        private ApkHandle(String apkPath, long apkHandle) {
+            this.apkPath = apkPath;
+            this.apkHandle = apkHandle;
+        }
+
+        @Override
+        public void close() {
+            nativeClose(apkHandle);
+        }
     }
 
-    private native static int nativeCopyNativeBinaries(String filePath, String sharedLibraryPath,
-            String cpuAbi, String cpuAbi2);
+
+    private static native long nativeOpenApk(String path);
+    private static native void nativeClose(long handle);
+
+    private static native long nativeSumNativeBinaries(long handle, String cpuAbi);
+
+    /**
+     * Sums the size of native binaries in an APK for a given ABI.
+     *
+     * @return size of all native binary files in bytes
+     */
+    public static long sumNativeBinariesLI(ApkHandle handle, String abi) {
+        return nativeSumNativeBinaries(handle.apkHandle, abi);
+    }
+
+    private native static int nativeCopyNativeBinaries(long handle,
+            String sharedLibraryPath, String abiToCopy);
 
     /**
      * Copies native binaries to a shared library directory.
      *
-     * @param apkFile APK file to scan for native libraries
+     * @param handle APK file to scan for native libraries
      * @param sharedLibraryDir directory for libraries to be copied to
      * @return {@link PackageManager#INSTALL_SUCCEEDED} if successful or another
      *         error code from that class if not
      */
-    public static int copyNativeBinariesIfNeededLI(File apkFile, File sharedLibraryDir) {
-        final String cpuAbi = Build.CPU_ABI;
-        final String cpuAbi2 = Build.CPU_ABI2;
-        return nativeCopyNativeBinaries(apkFile.getPath(), sharedLibraryDir.getPath(), cpuAbi,
-                cpuAbi2);
+    public static int copyNativeBinariesIfNeededLI(ApkHandle handle, File sharedLibraryDir,
+            String abi) {
+        return nativeCopyNativeBinaries(handle.apkHandle, sharedLibraryDir.getPath(), abi);
     }
+
+    /**
+     * Checks if a given APK contains native code for any of the provided
+     * {@code supportedAbis}. Returns an index into {@code supportedAbis} if a matching
+     * ABI is found, {@link PackageManager#NO_NATIVE_LIBRARIES} if the
+     * APK doesn't contain any native code, and
+     * {@link PackageManager#INSTALL_FAILED_NO_MATCHING_ABIS} if none of the ABIs match.
+     */
+    public static int findSupportedAbi(ApkHandle handle, String[] supportedAbis) {
+        return nativeFindSupportedAbi(handle.apkHandle, supportedAbis);
+    }
+
+    private native static int nativeFindSupportedAbi(long handle, String[] supportedAbis);
 
     // Convenience method to call removeNativeBinariesFromDirLI(File)
     public static boolean removeNativeBinariesLI(String nativeLibraryPath) {
@@ -103,4 +152,18 @@ public class NativeLibraryHelper {
 
         return deletedFiles;
     }
+
+    // We don't care about the other return values for now.
+    private static final int BITCODE_PRESENT = 1;
+
+    public static boolean hasRenderscriptBitcode(ApkHandle handle) throws IOException {
+        final int returnVal = hasRenderscriptBitcode(handle.apkHandle);
+        if (returnVal < 0) {
+            throw new IOException("Error scanning APK, code: " + returnVal);
+        }
+
+        return (returnVal == BITCODE_PRESENT);
+    }
+
+    private static native int hasRenderscriptBitcode(long apkHandle);
 }

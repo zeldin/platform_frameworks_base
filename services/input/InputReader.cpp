@@ -42,8 +42,8 @@
 #include "InputReader.h"
 
 #include <cutils/log.h>
-#include <androidfw/Keyboard.h>
-#include <androidfw/VirtualKeyMap.h>
+#include <input/Keyboard.h>
+#include <input/VirtualKeyMap.h>
 
 #include <stddef.h>
 #include <stdlib.h>
@@ -354,8 +354,9 @@ void InputReader::addDeviceLocked(nsecs_t when, int32_t deviceId) {
 
     InputDeviceIdentifier identifier = mEventHub->getDeviceIdentifier(deviceId);
     uint32_t classes = mEventHub->getDeviceClasses(deviceId);
+    int32_t controllerNumber = mEventHub->getDeviceControllerNumber(deviceId);
 
-    InputDevice* device = createDeviceLocked(deviceId, identifier, classes);
+    InputDevice* device = createDeviceLocked(deviceId, controllerNumber, identifier, classes);
     device->configure(when, &mConfig, 0);
     device->reset(when);
 
@@ -395,10 +396,10 @@ void InputReader::removeDeviceLocked(nsecs_t when, int32_t deviceId) {
     delete device;
 }
 
-InputDevice* InputReader::createDeviceLocked(int32_t deviceId,
+InputDevice* InputReader::createDeviceLocked(int32_t deviceId, int32_t controllerNumber,
         const InputDeviceIdentifier& identifier, uint32_t classes) {
     InputDevice* device = new InputDevice(&mContext, deviceId, bumpGenerationLocked(),
-            identifier, classes);
+            controllerNumber, identifier, classes);
 
     // External devices.
     if (classes & INPUT_DEVICE_CLASS_EXTERNAL) {
@@ -843,8 +844,8 @@ bool InputReaderThread::threadLoop() {
 // --- InputDevice ---
 
 InputDevice::InputDevice(InputReaderContext* context, int32_t id, int32_t generation,
-        const InputDeviceIdentifier& identifier, uint32_t classes) :
-        mContext(context), mId(id), mGeneration(generation),
+        int32_t controllerNumber, const InputDeviceIdentifier& identifier, uint32_t classes) :
+        mContext(context), mId(id), mGeneration(generation), mControllerNumber(controllerNumber),
         mIdentifier(identifier), mClasses(classes),
         mSources(0), mIsExternal(false), mDropUntilNextSync(false) {
 }
@@ -995,7 +996,8 @@ void InputDevice::timeoutExpired(nsecs_t when) {
 }
 
 void InputDevice::getDeviceInfo(InputDeviceInfo* outDeviceInfo) {
-    outDeviceInfo->initialize(mId, mGeneration, mIdentifier, mAlias, mIsExternal);
+    outDeviceInfo->initialize(mId, mGeneration, mControllerNumber, mIdentifier, mAlias,
+            mIsExternal);
 
     size_t numMappers = mMappers.size();
     for (size_t i = 0; i < numMappers; i++) {
@@ -1990,7 +1992,7 @@ void KeyboardInputMapper::dump(String8& dump) {
     dumpParameters(dump);
     dump.appendFormat(INDENT3 "KeyboardType: %d\n", mKeyboardType);
     dump.appendFormat(INDENT3 "Orientation: %d\n", mOrientation);
-    dump.appendFormat(INDENT3 "KeyDowns: %d keys currently down\n", mKeyDowns.size());
+    dump.appendFormat(INDENT3 "KeyDowns: %zu keys currently down\n", mKeyDowns.size());
     dump.appendFormat(INDENT3 "MetaState: 0x%0x\n", mMetaState);
     dump.appendFormat(INDENT3 "DownTime: %lld\n", mDownTime);
 }
@@ -2133,12 +2135,11 @@ void KeyboardInputMapper::processKey(nsecs_t when, bool down, int32_t keyCode,
         }
     }
 
-    bool metaStateChanged = false;
     int32_t oldMetaState = mMetaState;
     int32_t newMetaState = updateMetaState(keyCode, down, oldMetaState);
-    if (oldMetaState != newMetaState) {
+    bool metaStateChanged = oldMetaState != newMetaState;
+    if (metaStateChanged) {
         mMetaState = newMetaState;
-        metaStateChanged = true;
         updateLedState(false);
     }
 
@@ -2631,6 +2632,7 @@ void TouchInputMapper::populateDeviceInfo(InputDeviceInfo* info) {
             info->addMotionRange(AMOTION_EVENT_AXIS_GENERIC_4, mSource, y.min, y.max, y.flat,
                     y.fuzz, y.resolution);
         }
+        info->setButtonUnderPad(mParameters.hasButtonUnderPad);
     }
 }
 
@@ -2796,6 +2798,9 @@ void TouchInputMapper::configureParameters() {
         mParameters.deviceType = Parameters::DEVICE_TYPE_POINTER;
     }
 
+    mParameters.hasButtonUnderPad=
+            getEventHub()->hasInputProperty(getDeviceId(), INPUT_PROP_BUTTONPAD);
+
     String8 deviceTypeString;
     if (getDevice()->getConfiguration().tryGetProperty(String8("touch.deviceType"),
             deviceTypeString)) {
@@ -2926,7 +2931,6 @@ void TouchInputMapper::configureSurface(nsecs_t when, bool* outResetNeeded) {
     int32_t rawHeight = mRawPointerAxes.y.maxValue - mRawPointerAxes.y.minValue + 1;
 
     // Get associated display dimensions.
-    bool viewportChanged = false;
     DisplayViewport newViewport;
     if (mParameters.hasAssociatedDisplay) {
         if (!mConfig.getDisplayInfo(mParameters.associatedDisplayIsExternal, &newViewport)) {
@@ -2940,9 +2944,9 @@ void TouchInputMapper::configureSurface(nsecs_t when, bool* outResetNeeded) {
     } else {
         newViewport.setNonDisplayViewport(rawWidth, rawHeight);
     }
-    if (mViewport != newViewport) {
+    bool viewportChanged = mViewport != newViewport;
+    if (viewportChanged) {
         mViewport = newViewport;
-        viewportChanged = true;
 
         if (mDeviceMode == DEVICE_MODE_DIRECT || mDeviceMode == DEVICE_MODE_POINTER) {
             // Convert rotated viewport to natural surface coordinates.
@@ -3011,9 +3015,8 @@ void TouchInputMapper::configureSurface(nsecs_t when, bool* outResetNeeded) {
     }
 
     // If moving between pointer modes, need to reset some state.
-    bool deviceModeChanged;
-    if (mDeviceMode != oldDeviceMode) {
-        deviceModeChanged = true;
+    bool deviceModeChanged = mDeviceMode != oldDeviceMode;
+    if (deviceModeChanged) {
         mOrientedRanges.clear();
     }
 
@@ -3369,7 +3372,7 @@ void TouchInputMapper::dumpVirtualKeys(String8& dump) {
 
         for (size_t i = 0; i < mVirtualKeys.size(); i++) {
             const VirtualKey& virtualKey = mVirtualKeys.itemAt(i);
-            dump.appendFormat(INDENT4 "%d: scanCode=%d, keyCode=%d, "
+            dump.appendFormat(INDENT4 "%zu: scanCode=%d, keyCode=%d, "
                     "hitLeft=%d, hitRight=%d, hitTop=%d, hitBottom=%d\n",
                     i, virtualKey.scanCode, virtualKey.keyCode,
                     virtualKey.hitLeft, virtualKey.hitRight,
@@ -4650,6 +4653,14 @@ bool TouchInputMapper::preparePointerGestures(nsecs_t when,
                 mCurrentFingerIdBits, positions);
     }
 
+    // If the gesture ever enters a mode other than TAP, HOVER or TAP_DRAG, without first returning
+    // to NEUTRAL, then we should not generate tap event.
+    if (mPointerGesture.lastGestureMode != PointerGesture::HOVER
+            && mPointerGesture.lastGestureMode != PointerGesture::TAP
+            && mPointerGesture.lastGestureMode != PointerGesture::TAP_DRAG) {
+        mPointerGesture.resetTap();
+    }
+
     // Pick a new active touch id if needed.
     // Choose an arbitrary pointer that just went down, if there is one.
     // Otherwise choose an arbitrary remaining pointer.
@@ -4858,8 +4869,12 @@ bool TouchInputMapper::preparePointerGestures(nsecs_t when,
                 }
             } else {
 #if DEBUG_GESTURES
-                ALOGD("Gestures: Not a TAP, %0.3fms since down",
-                        (when - mPointerGesture.tapDownTime) * 0.000001f);
+                if (mPointerGesture.tapDownTime != LLONG_MIN) {
+                    ALOGD("Gestures: Not a TAP, %0.3fms since down",
+                            (when - mPointerGesture.tapDownTime) * 0.000001f);
+                } else {
+                    ALOGD("Gestures: Not a TAP, incompatible mode transitions");
+                }
 #endif
             }
         }
@@ -6104,8 +6119,8 @@ void MultiTouchInputMapper::configureRawPointerAxes() {
             && mRawPointerAxes.slot.minValue == 0 && mRawPointerAxes.slot.maxValue > 0) {
         size_t slotCount = mRawPointerAxes.slot.maxValue + 1;
         if (slotCount > MAX_SLOTS) {
-            ALOGW("MultiTouch Device %s reported %d slots but the framework "
-                    "only supports a maximum of %d slots at this time.",
+            ALOGW("MultiTouch Device %s reported %zu slots but the framework "
+                    "only supports a maximum of %zu slots at this time.",
                     getDeviceName().string(), slotCount, MAX_SLOTS);
             slotCount = MAX_SLOTS;
         }
@@ -6277,7 +6292,7 @@ void JoystickInputMapper::configure(nsecs_t when,
         // If there are too many axes, start dropping them.
         // Prefer to keep explicitly mapped axes.
         if (mAxes.size() > PointerCoords::MAX_AXES) {
-            ALOGI("Joystick '%s' has %d axes but the framework only supports a maximum of %d.",
+            ALOGI("Joystick '%s' has %zu axes but the framework only supports a maximum of %d.",
                     getDeviceName().string(), mAxes.size(), PointerCoords::MAX_AXES);
             pruneAxes(true);
             pruneAxes(false);

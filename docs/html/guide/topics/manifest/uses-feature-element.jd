@@ -62,7 +62,7 @@ below.</p>
 href="{@docRoot}guide/topics/manifest/manifest-element.html">&lt;manifest&gt;</a></code></dd>
 
 <dt>description:</dt>
-<dd>Declares a single hardware or software feature that is used by the
+<dd itemprop="description">Declares a single hardware or software feature that is used by the
 application.
 
 <p>The purpose of a <code>&lt;uses-feature&gt;</code> declaration is to inform
@@ -136,7 +136,7 @@ device compatibility.</p>
   <dd>Specifies a single hardware or software feature used by the application,
 as a descriptor string. Valid descriptor values are listed in the <a
 href="#hw-features">Hardware features</a> and <a href="#sw-features">Software
-features</a> tables, below. </dd>
+features</a> tables, below. Descriptor string values are case-sensitive.</dd>
 
   <dt><a name="required"></a><code>android:required</code></dt>  <!-- added in api level 5 -->
   <dd>Boolean value that indicates whether the application requires
@@ -163,8 +163,7 @@ feature</em>, if necessary. </li>
   <dd>The OpenGL ES version required by the application. The higher 16 bits
 represent the major number and the lower 16 bits represent the minor number. For
 example, to specify OpenGL ES version 2.0, you would set the value as
-"0x00020000". To specify OpenGL ES 2.1, if/when such a version were made
-available, you would set the value as "0x00020001".
+"0x00020000", or to specify OpenGL ES 3.0, you would set the value as "0x00030000".
 
   <p>An application should specify at most one <code>android:glEsVersion</code>
 attribute in its manifest. If it specifies more than one, the
@@ -183,6 +182,10 @@ that it requires OpenGL ES 2.0.</p>
   <p>An application that can work with any of several OpenGL ES versions should
 only specify the numerically lowest version of OpenGL ES that it requires. (It
 can check at run-time whether a higher level of OpenGL ES is available.)</p>
+
+  <p>For more information about using OpenGL ES, including how to check the supported OpenGL ES
+version at runtime, see the <a href="{@docRoot}guide/topics/graphics/opengl.html">OpenGL ES</a>
+API guide.</p>
   </dd>
 
 </dl>
@@ -546,11 +549,15 @@ is sensitive to delays or lag in sound input or output.</td>
 </td>
     </tr>
     <tr>
-       <td>Bluetooth</td>
-       <td><code>android.hardware.bluetooth</td>
+       <td rowspan="2">Bluetooth</td>
+       <td><code>android.hardware.bluetooth</code></td>
        <td>The application uses Bluetooth radio features in the device.</td>
-<td>
-</td>
+       <td></td>
+    </tr>
+    <tr>
+       <td><code>android.hardware.bluetooth_le</code></td>
+       <td>The application uses Bluetooth Low Energy radio features in the device.</td>
+       <td></td>
     </tr>
     <tr>
        <td rowspan="5">Camera</td>
@@ -583,6 +590,13 @@ not required.</td>
 </tr>
 
 <tr>
+  <td>Infrared</td>
+  <td><code>android.hardware.consumerir</code></td>
+  <td>The application uses the consumer IR capabilities on the device.</td>
+  <td></td>
+</tr>
+
+<tr>
   <td rowspan="3">Location</td>
   <td><code>android.hardware.location</code></td>
   <td>The application uses one or more features on the device for determining
@@ -610,13 +624,18 @@ from a Global Positioning System receiver on the device. </td>
   <td></td>
 </tr>
 <tr>
-  <td>NFC</td>
+  <td rowspan="2">NFC</td>
   <td><code>android.hardware.nfc</td>
   <td>The application uses Near Field Communications radio features in the device.</td>
   <td></td>
 </tr>
 <tr>
-  <td rowspan="6">Sensors</td>
+  <td><code>android.hardware.nfc.hce</code></td>
+  <td>The application uses the NFC card emulation feature in the device.</td>
+  <td></td>
+</tr>
+<tr>
+  <td rowspan="8">Sensors</td>
   <td><code>android.hardware.sensor.accelerometer</code></td>
   <td>The application uses motion readings from an accelerometer on the
 device.</td>
@@ -646,6 +665,16 @@ the device.</td>
 <tr>
   <td><code>android.hardware.sensor.proximity</code></td>
   <td>The application uses the device's proximity sensor.</td>
+  <td></td>
+</tr>
+<tr>
+  <td><code>android.hardware.sensor.stepcounter</code></td>
+  <td>The application uses the device's step counter.</td>
+  <td></td>
+</tr>
+<tr>
+  <td><code>android.hardware.sensor.stepdetector</code></td>
+  <td>The application uses the device's step detector.</td>
   <td></td>
 </tr>
 
@@ -825,10 +854,14 @@ hosts).</td>
 </tr>
 
 <tr>
-  <td>Wifi</td>
+  <td rowspan="2">Wi-Fi</td>
   <td><code>android.hardware.wifi</code></td>
-  <td>The application uses 802.11 networking (wifi) features on the device.</td>
+  <td>The application uses 802.11 networking (Wi-Fi) features on the device.</td>
   <td></td>
+</tr>
+<tr>
+  <td><code>android.hardware.wifi.direct</code></td>
+  <td>The application uses the Wi-Fi Direct networking features on the device.</td>
 </tr>
 
   </table>
@@ -846,26 +879,47 @@ in a separate <code>&lt;uses-feature&gt;</code> element. </p>
   <th>Feature</th>
   <th>Attribute Value</th> 
   <th>Description</th>
-  <th>Comments</th>
+</tr>
+<tr>
+  <td>App Widgets</td>
+  <td><code>android.software.app_widgets</code></td>
+  <td>The application uses or provides App Widgets and should be installed only on devices
+  that include a Home screen or similar location where users can embed App Widgets.</td>
+</tr>
+<tr>
+  <td>Device Management</td>
+  <td><code>android.software.device_admin</code></td>
+  <td>The application uses device policy enforcement via device administrators.</td>
+</tr>
+<tr>
+  <td>Home Screen</td>
+  <td><code>android.software.home_screen</code></td>
+  <td>The application behaves as a Home screen replacement and should be installed only on
+  devices that support third-party Home screen apps.</td>
+</tr>
+<tr>
+  <td>Input Method</td>
+  <td><code>android.software.input_methods</code></td>
+  <td>The application provides a custom input method and should be installed only on devices that
+  support third-party input methods.</td>
 </tr>
 <tr>
   <td>Live Wallpaper</td>
   <td><code>android.software.live_wallpaper</code></td>
-  <td>The application uses or provides Live Wallpapers.</td>
-  <td></td>
+  <td>The application uses or provides Live Wallpapers and should be installed only on devices that
+  support Live Wallpapers.</td>
 </tr>
 <tr>
   <td rowspan="2">SIP/VOIP</td>
   <td><code>android.software.sip</code></td>
-  <td>The application uses SIP service on the device.
+  <td>The application uses SIP service on the device and should be installed only on devices that
+  support SIP.
   </td>
-  <td></td>
 </tr>
 <tr>
   <td><code>android.software.sip.voip</code></td>
-  <td>Subfeature. The application uses SIP-based VOIP service on the device.
-  </td>
-  <td>This subfeature implicitly declares the <code>android.software.sip</code> parent feature,
+  <td><p>Subfeature. The application uses SIP-based VOIP service on the device.
+  <p>This subfeature implicitly declares the <code>android.software.sip</code> parent feature,
 unless declared with <code>android:required="false"</code>.</td>
 </tr>
   </table>
@@ -1030,7 +1084,7 @@ filtering based on the <code>CAMERA</code> permission, you would add this
 </tr>
 
 <tr>
-  <td rowspan="3">Wifi</td>
+  <td rowspan="3">Wi-Fi</td>
   <td><code>ACCESS_WIFI_STATE</code></td>
   <td><code>android.hardware.wifi</code></td>
 <!--  <td></td> -->

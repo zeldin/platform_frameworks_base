@@ -37,6 +37,15 @@ interface IBluetoothGatt {
     void unregisterClient(in int clientIf);
     void clientConnect(in int clientIf, in String address, in boolean isDirect);
     void clientDisconnect(in int clientIf, in String address);
+    void startAdvertising(in int appIf);
+    void stopAdvertising();
+    boolean setAdvServiceData(in byte[] serviceData);
+    byte[] getAdvServiceData();
+    boolean setAdvManufacturerCodeAndData(int manufactureCode, in byte[] manufacturerData);
+    byte[] getAdvManufacturerData();
+    List<ParcelUuid> getAdvServiceUuids();
+    void removeAdvManufacturerCodeAndData(int manufacturerCode);
+    boolean isAdvertising();
     void refreshDevice(in int clientIf, in String address);
     void discoverServices(in int clientIf, in String address);
     void readCharacteristic(in int clientIf, in String address, in int srvcType,
@@ -50,12 +59,13 @@ interface IBluetoothGatt {
     void readDescriptor(in int clientIf, in String address, in int srvcType,
                             in int srvcInstanceId, in ParcelUuid srvcId,
                             in int charInstanceId, in ParcelUuid charId,
-                            in ParcelUuid descrUuid, in int authReq);
+                            in int descrInstanceId, in ParcelUuid descrUuid,
+                            in int authReq);
     void writeDescriptor(in int clientIf, in String address, in int srvcType,
                             in int srvcInstanceId, in ParcelUuid srvcId,
                             in int charInstanceId, in ParcelUuid charId,
-                            in ParcelUuid descrId, in int writeType,
-                            in int authReq, in byte[] value);
+                            in int descrInstanceId, in ParcelUuid descrId,
+                            in int writeType, in int authReq, in byte[] value);
     void registerForNotification(in int clientIf, in String address, in int srvcType,
                             in int srvcInstanceId, in ParcelUuid srvcId,
                             in int charInstanceId, in ParcelUuid charId,
@@ -70,7 +80,7 @@ interface IBluetoothGatt {
     void serverDisconnect(in int serverIf, in String address);
     void beginServiceDeclaration(in int serverIf, in int srvcType,
                             in int srvcInstanceId, in int minHandles,
-                            in ParcelUuid srvcId);
+                            in ParcelUuid srvcId, boolean advertisePreferred);
     void addIncludedService(in int serverIf, in int srvcType,
                             in int srvcInstanceId, in ParcelUuid srvcId);
     void addCharacteristic(in int serverIf, in ParcelUuid charId,

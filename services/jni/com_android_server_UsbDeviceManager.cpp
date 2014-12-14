@@ -20,6 +20,7 @@
 #include "jni.h"
 #include "JNIHelp.h"
 #include "android_runtime/AndroidRuntime.h"
+#include "android_runtime/Log.h"
 
 #include <stdio.h>
 #include <asm/byteorder.h>
@@ -62,7 +63,8 @@ static void set_accessory_string(JNIEnv *env, int fd, int cmd, jobjectArray strA
 }
 
 
-static jobjectArray android_server_UsbDeviceManager_getAccessoryStrings(JNIEnv *env, jobject thiz)
+static jobjectArray android_server_UsbDeviceManager_getAccessoryStrings(JNIEnv *env,
+                                                                        jobject /* thiz */)
 {
     int fd = open(DRIVER_NAME, O_RDWR);
     if (fd < 0) {
@@ -84,7 +86,7 @@ out:
     return strArray;
 }
 
-static jobject android_server_UsbDeviceManager_openAccessory(JNIEnv *env, jobject thiz)
+static jobject android_server_UsbDeviceManager_openAccessory(JNIEnv *env, jobject /* thiz */)
 {
     int fd = open(DRIVER_NAME, O_RDWR);
     if (fd < 0) {
@@ -99,7 +101,8 @@ static jobject android_server_UsbDeviceManager_openAccessory(JNIEnv *env, jobjec
         gParcelFileDescriptorOffsets.mConstructor, fileDescriptor);
 }
 
-static jboolean android_server_UsbDeviceManager_isStartRequested(JNIEnv *env, jobject thiz)
+static jboolean android_server_UsbDeviceManager_isStartRequested(JNIEnv* /* env */,
+                                                                 jobject /* thiz */)
 {
     int fd = open(DRIVER_NAME, O_RDWR);
     if (fd < 0) {
@@ -111,7 +114,7 @@ static jboolean android_server_UsbDeviceManager_isStartRequested(JNIEnv *env, jo
     return (result == 1);
 }
 
-static jint android_server_UsbDeviceManager_getAudioMode(JNIEnv *env, jobject thiz)
+static jint android_server_UsbDeviceManager_getAudioMode(JNIEnv* /* env */, jobject /* thiz */)
 {
     int fd = open(DRIVER_NAME, O_RDWR);
     if (fd < 0) {

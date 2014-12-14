@@ -1,14 +1,6 @@
 page.title=Launch Checklist
 page.tags="publishing","launch","Google Play", "Developer Console"
 @jd:body
-<div id="butterbar-wrapper" >
-  <div id="butterbar" >
-    <div id="butterbar-message">
-<a target="_blank" href="https://docs.google.com/a/google.com/forms/d/1EHLPGqhbxj2HungHRRN4_0K9TGpc-Izy-u46vBDgS8Q/viewform">
-      Take the Android Developer Survey</a>
-    </div>
-  </div>
-</div>
 
 <div id="qv-wrapper"><div id="qv">
 <h2>Checklist</h2>
@@ -679,7 +671,7 @@ appreciate that you are serious about improving the quality of your app. </li>
 <li><strong><a href="http://support.google.com/googleplay/android-developer/bin/answer.py?hl=en&answer=113477&topic=2364761&ctx=topic">Supporting your users
 </a></strong> &mdash; Help Center document describing options for supporting users.</li>
 <li><strong><a href="http://support.google.com/googleplay/android-developer/bin/answer.py?hl=en&answer=1153479">In-app Billing</a></strong> &mdash; Help Center document describing how to correctly set up In-app Billing.</li>
-<li><strong><a href="https://support.google.com/googleplay/android-developer/bin/answer.py?hl=en&answer=138001">Issuing Refunds</a></strong> &mdash;  -- Help Center document describing how to issue refunds.</li>
+<li><strong><a href="https://support.google.com/payments/answer/2741495?rd=1">Issuing Refunds</a></strong> &mdash;  -- Help Center document describing how to issue refunds.</li>
 </ul>
 </td>
 </tr>

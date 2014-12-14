@@ -44,6 +44,7 @@ import android.os.storage.IMountService;
 import android.os.storage.IMountShutdownObserver;
 
 import com.android.internal.telephony.ITelephony;
+import com.android.server.pm.PackageManagerService;
 
 import android.util.Log;
 import android.view.WindowManager;
@@ -328,6 +329,14 @@ public final class ShutdownThread extends Thread {
             }
         }
 
+        Log.i(TAG, "Shutting down package manager...");
+
+        final PackageManagerService pm = (PackageManagerService)
+            ServiceManager.getService("package");
+        if (pm != null) {
+            pm.shutdown();
+        }
+
         // Shutdown radios.
         shutdownRadios(MAX_RADIO_WAIT_TIME);
 
@@ -492,11 +501,8 @@ public final class ShutdownThread extends Thread {
     public static void rebootOrShutdown(boolean reboot, String reason) {
         if (reboot) {
             Log.i(TAG, "Rebooting, reason: " + reason);
-            try {
-                PowerManagerService.lowLevelReboot(reason);
-            } catch (Exception e) {
-                Log.e(TAG, "Reboot failed, will attempt shutdown instead", e);
-            }
+            PowerManagerService.lowLevelReboot(reason);
+            Log.e(TAG, "Reboot failed, will attempt shutdown instead");
         } else if (SHUTDOWN_VIBRATE_MS > 0) {
             // vibrate before shutting down
             Vibrator vibrator = new SystemVibrator();

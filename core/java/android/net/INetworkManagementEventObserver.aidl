@@ -16,6 +16,8 @@
 
 package android.net;
 
+import android.net.LinkAddress;
+
 /**
  * Callback class for receiving events from an INetworkManagementService
  *
@@ -53,6 +55,23 @@ interface INetworkManagementEventObserver {
      */
     void interfaceRemoved(String iface);
 
+
+    /**
+     * An interface address has been added or updated.
+     *
+     * @param iface The interface.
+     * @param address The address.
+     */
+    void addressUpdated(String iface, in LinkAddress address);
+
+    /**
+     * An interface address has been removed.
+     *
+     * @param iface The interface.
+     * @param address The address.
+     */
+    void addressRemoved(String iface, in LinkAddress address);
+
     /**
      * A networking quota limit has been reached. The quota might not
      * be specific to an interface.
@@ -69,4 +88,13 @@ interface INetworkManagementEventObserver {
      * @param active  True if the interface is actively transmitting data, false if it is idle.
      */
     void interfaceClassDataActivityChanged(String label, boolean active);
+
+    /**
+     * Information about available DNS servers has been received.
+     *
+     * @param iface The interface on which the information was received.
+     * @param lifetime The time in seconds for which the DNS servers may be used.
+     * @param servers The IP addresses of the DNS servers.
+     */
+    void interfaceDnsServerInfo(String iface, long lifetime, in String[] servers);
 }

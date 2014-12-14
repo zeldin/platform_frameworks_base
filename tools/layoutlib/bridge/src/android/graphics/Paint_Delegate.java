@@ -32,7 +32,6 @@ import java.awt.Stroke;
 import java.awt.Toolkit;
 import java.awt.font.FontRenderContext;
 import java.awt.geom.AffineTransform;
-import java.awt.geom.Rectangle2D;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -97,7 +96,7 @@ public class Paint_Delegate {
 
     // ---- Public Helper methods ----
 
-    public static Paint_Delegate getDelegate(int native_paint) {
+    public static Paint_Delegate getDelegate(long native_paint) {
         return sManager.getDelegate(native_paint);
     }
 
@@ -576,7 +575,8 @@ public class Paint_Delegate {
             return 0;
         }
 
-        return delegate.measureText(text, index, count, bidiFlags);
+        RectF bounds = delegate.measureText(text, index, count, isRtl(bidiFlags));
+        return bounds.right - bounds.left;
     }
 
     @LayoutlibDelegate
@@ -615,7 +615,8 @@ public class Paint_Delegate {
             }
 
             // measure from start to end
-            float res = delegate.measureText(text, start, end - start + 1, bidiFlags);
+            RectF bounds = delegate.measureText(text, start, end - start + 1, isRtl(bidiFlags));
+            float res = bounds.right - bounds.left;
 
             if (measuredWidth != null) {
                 measuredWidth[measureIndex] = res;
@@ -641,13 +642,13 @@ public class Paint_Delegate {
     }
 
     @LayoutlibDelegate
-    /*package*/ static int native_init() {
+    /*package*/ static long native_init() {
         Paint_Delegate newDelegate = new Paint_Delegate();
         return sManager.addNewDelegate(newDelegate);
     }
 
     @LayoutlibDelegate
-    /*package*/ static int native_initWithPaint(int paint) {
+    /*package*/ static long native_initWithPaint(long paint) {
         // get the delegate from the native int.
         Paint_Delegate delegate = sManager.getDelegate(paint);
         if (delegate == null) {
@@ -659,7 +660,7 @@ public class Paint_Delegate {
     }
 
     @LayoutlibDelegate
-    /*package*/ static void native_reset(int native_object) {
+    /*package*/ static void native_reset(long native_object) {
         // get the delegate from the native int.
         Paint_Delegate delegate = sManager.getDelegate(native_object);
         if (delegate == null) {
@@ -670,7 +671,7 @@ public class Paint_Delegate {
     }
 
     @LayoutlibDelegate
-    /*package*/ static void native_set(int native_dst, int native_src) {
+    /*package*/ static void native_set(long native_dst, long native_src) {
         // get the delegate from the native int.
         Paint_Delegate delegate_dst = sManager.getDelegate(native_dst);
         if (delegate_dst == null) {
@@ -687,7 +688,7 @@ public class Paint_Delegate {
     }
 
     @LayoutlibDelegate
-    /*package*/ static int native_getStyle(int native_object) {
+    /*package*/ static long native_getStyle(long native_object) {
         // get the delegate from the native int.
         Paint_Delegate delegate = sManager.getDelegate(native_object);
         if (delegate == null) {
@@ -698,7 +699,7 @@ public class Paint_Delegate {
     }
 
     @LayoutlibDelegate
-    /*package*/ static void native_setStyle(int native_object, int style) {
+    /*package*/ static void native_setStyle(long native_object, int style) {
         // get the delegate from the native int.
         Paint_Delegate delegate = sManager.getDelegate(native_object);
         if (delegate == null) {
@@ -709,7 +710,7 @@ public class Paint_Delegate {
     }
 
     @LayoutlibDelegate
-    /*package*/ static int native_getStrokeCap(int native_object) {
+    /*package*/ static long native_getStrokeCap(long native_object) {
         // get the delegate from the native int.
         Paint_Delegate delegate = sManager.getDelegate(native_object);
         if (delegate == null) {
@@ -720,7 +721,7 @@ public class Paint_Delegate {
     }
 
     @LayoutlibDelegate
-    /*package*/ static void native_setStrokeCap(int native_object, int cap) {
+    /*package*/ static void native_setStrokeCap(long native_object, int cap) {
         // get the delegate from the native int.
         Paint_Delegate delegate = sManager.getDelegate(native_object);
         if (delegate == null) {
@@ -731,7 +732,7 @@ public class Paint_Delegate {
     }
 
     @LayoutlibDelegate
-    /*package*/ static int native_getStrokeJoin(int native_object) {
+    /*package*/ static long native_getStrokeJoin(long native_object) {
         // get the delegate from the native int.
         Paint_Delegate delegate = sManager.getDelegate(native_object);
         if (delegate == null) {
@@ -742,7 +743,7 @@ public class Paint_Delegate {
     }
 
     @LayoutlibDelegate
-    /*package*/ static void native_setStrokeJoin(int native_object, int join) {
+    /*package*/ static void native_setStrokeJoin(long native_object, int join) {
         // get the delegate from the native int.
         Paint_Delegate delegate = sManager.getDelegate(native_object);
         if (delegate == null) {
@@ -753,7 +754,7 @@ public class Paint_Delegate {
     }
 
     @LayoutlibDelegate
-    /*package*/ static boolean native_getFillPath(int native_object, int src, int dst) {
+    /*package*/ static boolean native_getFillPath(long native_object, long src, long dst) {
         Paint_Delegate paint = sManager.getDelegate(native_object);
         if (paint == null) {
             return false;
@@ -779,7 +780,7 @@ public class Paint_Delegate {
     }
 
     @LayoutlibDelegate
-    /*package*/ static int native_setShader(int native_object, int shader) {
+    /*package*/ static long native_setShader(long native_object, long shader) {
         // get the delegate from the native int.
         Paint_Delegate delegate = sManager.getDelegate(native_object);
         if (delegate == null) {
@@ -792,7 +793,7 @@ public class Paint_Delegate {
     }
 
     @LayoutlibDelegate
-    /*package*/ static int native_setColorFilter(int native_object, int filter) {
+    /*package*/ static long native_setColorFilter(long native_object, long filter) {
         // get the delegate from the native int.
         Paint_Delegate delegate = sManager.getDelegate(native_object);
         if (delegate == null) {
@@ -811,7 +812,7 @@ public class Paint_Delegate {
     }
 
     @LayoutlibDelegate
-    /*package*/ static int native_setXfermode(int native_object, int xfermode) {
+    /*package*/ static long native_setXfermode(long native_object, long xfermode) {
         // get the delegate from the native int.
         Paint_Delegate delegate = sManager.getDelegate(native_object);
         if (delegate == null) {
@@ -824,7 +825,7 @@ public class Paint_Delegate {
     }
 
     @LayoutlibDelegate
-    /*package*/ static int native_setPathEffect(int native_object, int effect) {
+    /*package*/ static long native_setPathEffect(long native_object, long effect) {
         // get the delegate from the native int.
         Paint_Delegate delegate = sManager.getDelegate(native_object);
         if (delegate == null) {
@@ -837,7 +838,7 @@ public class Paint_Delegate {
     }
 
     @LayoutlibDelegate
-    /*package*/ static int native_setMaskFilter(int native_object, int maskfilter) {
+    /*package*/ static long native_setMaskFilter(long native_object, long maskfilter) {
         // get the delegate from the native int.
         Paint_Delegate delegate = sManager.getDelegate(native_object);
         if (delegate == null) {
@@ -856,7 +857,7 @@ public class Paint_Delegate {
     }
 
     @LayoutlibDelegate
-    /*package*/ static int native_setTypeface(int native_object, int typeface) {
+    /*package*/ static long native_setTypeface(long native_object, long typeface) {
         // get the delegate from the native int.
         Paint_Delegate delegate = sManager.getDelegate(native_object);
         if (delegate == null) {
@@ -869,7 +870,7 @@ public class Paint_Delegate {
     }
 
     @LayoutlibDelegate
-    /*package*/ static int native_setRasterizer(int native_object, int rasterizer) {
+    /*package*/ static long native_setRasterizer(long native_object, long rasterizer) {
         // get the delegate from the native int.
         Paint_Delegate delegate = sManager.getDelegate(native_object);
         if (delegate == null) {
@@ -888,7 +889,7 @@ public class Paint_Delegate {
     }
 
     @LayoutlibDelegate
-    /*package*/ static int native_getTextAlign(int native_object) {
+    /*package*/ static long native_getTextAlign(long native_object) {
         // get the delegate from the native int.
         Paint_Delegate delegate = sManager.getDelegate(native_object);
         if (delegate == null) {
@@ -899,7 +900,7 @@ public class Paint_Delegate {
     }
 
     @LayoutlibDelegate
-    /*package*/ static void native_setTextAlign(int native_object, int align) {
+    /*package*/ static void native_setTextAlign(long native_object, int align) {
         // get the delegate from the native int.
         Paint_Delegate delegate = sManager.getDelegate(native_object);
         if (delegate == null) {
@@ -910,7 +911,7 @@ public class Paint_Delegate {
     }
 
     @LayoutlibDelegate
-    /*package*/ static void native_setTextLocale(int native_object, String locale) {
+    /*package*/ static void native_setTextLocale(long native_object, String locale) {
         // get the delegate from the native int.
         Paint_Delegate delegate = sManager.getDelegate(native_object);
         if (delegate == null) {
@@ -921,7 +922,7 @@ public class Paint_Delegate {
     }
 
     @LayoutlibDelegate
-    /*package*/ static int native_getTextWidths(int native_object, char[] text, int index,
+    /*package*/ static long native_getTextWidths(long native_object, char[] text, int index,
             int count, int bidiFlags, float[] widths) {
         // get the delegate from the native int.
         Paint_Delegate delegate = sManager.getDelegate(native_object);
@@ -963,68 +964,45 @@ public class Paint_Delegate {
     }
 
     @LayoutlibDelegate
-    /*package*/ static int native_getTextWidths(int native_object, String text, int start,
+    /*package*/ static long native_getTextWidths(long native_object, String text, int start,
             int end, int bidiFlags, float[] widths) {
         return native_getTextWidths(native_object, text.toCharArray(), start, end - start,
                 bidiFlags, widths);
     }
 
     @LayoutlibDelegate
-    /* package */static int native_getTextGlyphs(int native_object, String text, int start,
+    /* package */static long native_getTextGlyphs(long native_object, String text, int start,
             int end, int contextStart, int contextEnd, int flags, char[] glyphs) {
         // FIXME
         return 0;
     }
 
     @LayoutlibDelegate
-    /*package*/ static float native_getTextRunAdvances(int native_object,
+    /*package*/ static float native_getTextRunAdvances(long native_object,
             char[] text, int index, int count, int contextIndex, int contextCount,
             int flags, float[] advances, int advancesIndex) {
+
+        if (advances != null)
+            for (int i = advancesIndex; i< advancesIndex+count; i++)
+                advances[i]=0;
         // get the delegate from the native int.
         Paint_Delegate delegate = sManager.getDelegate(native_object);
-        if (delegate == null) {
+        if (delegate == null || delegate.mFonts == null || delegate.mFonts.size() == 0) {
             return 0.f;
         }
+        boolean isRtl = isRtl(flags);
 
-        if (delegate.mFonts.size() > 0) {
-            // FIXME: handle multi-char characters (see measureText)
-            float totalAdvance = 0;
-            for (int i = 0; i < count; i++) {
-                char c = text[i + index];
-                boolean found = false;
-                for (FontInfo info : delegate.mFonts) {
-                    if (info.mFont.canDisplay(c)) {
-                        float adv = info.mMetrics.charWidth(c);
-                        totalAdvance += adv;
-                        if (advances != null) {
-                            advances[i] = adv;
-                        }
-
-                        found = true;
-                        break;
-                    }
-                }
-
-                if (found == false) {
-                    // no advance for this char.
-                    if (advances != null) {
-                        advances[i] = 0.f;
-                    }
-                }
-            }
-
-            return totalAdvance;
-        }
-
-        return 0;
-
+        int limit = index + count;
+        RectF bounds = new BidiRenderer(null, delegate, text).renderText(
+                index, limit, isRtl, advances, advancesIndex, false, 0, 0);
+        return bounds.right - bounds.left;
     }
 
     @LayoutlibDelegate
-    /*package*/ static float native_getTextRunAdvances(int native_object,
+    /*package*/ static float native_getTextRunAdvances(long native_object,
             String text, int start, int end, int contextStart, int contextEnd,
             int flags, float[] advances, int advancesIndex) {
-        // FIXME: support contextStart, contextEnd and direction flag
+        // FIXME: support contextStart and contextEnd
         int count = end - start;
         char[] buffer = TemporaryBuffer.obtain(count);
         TextUtils.getChars(text, start, end, buffer, 0);
@@ -1034,7 +1012,7 @@ public class Paint_Delegate {
     }
 
     @LayoutlibDelegate
-    /*package*/ static int native_getTextRunCursor(Paint thisPaint, int native_object, char[] text,
+    /*package*/ static long native_getTextRunCursor(Paint thisPaint, long native_object, char[] text,
             int contextStart, int contextLength, int flags, int offset, int cursorOpt) {
         // FIXME
         Bridge.getLog().fidelityWarning(LayoutLog.TAG_UNSUPPORTED,
@@ -1043,7 +1021,7 @@ public class Paint_Delegate {
     }
 
     @LayoutlibDelegate
-    /*package*/ static int native_getTextRunCursor(Paint thisPaint, int native_object, String text,
+    /*package*/ static long native_getTextRunCursor(Paint thisPaint, long native_object, String text,
             int contextStart, int contextEnd, int flags, int offset, int cursorOpt) {
         // FIXME
         Bridge.getLog().fidelityWarning(LayoutLog.TAG_UNSUPPORTED,
@@ -1052,51 +1030,42 @@ public class Paint_Delegate {
     }
 
     @LayoutlibDelegate
-    /*package*/ static void native_getTextPath(int native_object, int bidiFlags,
-                char[] text, int index, int count, float x, float y, int path) {
+    /*package*/ static void native_getTextPath(long native_object, int bidiFlags,
+                char[] text, int index, int count, float x, float y, long path) {
         // FIXME
         Bridge.getLog().fidelityWarning(LayoutLog.TAG_UNSUPPORTED,
                 "Paint.getTextPath is not supported.", null, null /*data*/);
     }
 
     @LayoutlibDelegate
-    /*package*/ static void native_getTextPath(int native_object, int bidiFlags,
-            String text, int start, int end, float x, float y, int path) {
+    /*package*/ static void native_getTextPath(long native_object, int bidiFlags,
+            String text, int start, int end, float x, float y, long path) {
         // FIXME
         Bridge.getLog().fidelityWarning(LayoutLog.TAG_UNSUPPORTED,
                 "Paint.getTextPath is not supported.", null, null /*data*/);
     }
 
     @LayoutlibDelegate
-    /*package*/ static void nativeGetStringBounds(int nativePaint, String text, int start,
+    /*package*/ static void nativeGetStringBounds(long nativePaint, String text, int start,
             int end, int bidiFlags, Rect bounds) {
         nativeGetCharArrayBounds(nativePaint, text.toCharArray(), start, end - start, bidiFlags,
                 bounds);
     }
 
     @LayoutlibDelegate
-    /*package*/ static void nativeGetCharArrayBounds(int nativePaint, char[] text, int index,
+    /*package*/ static void nativeGetCharArrayBounds(long nativePaint, char[] text, int index,
             int count, int bidiFlags, Rect bounds) {
 
         // get the delegate from the native int.
         Paint_Delegate delegate = sManager.getDelegate(nativePaint);
-        if (delegate == null) {
+        if (delegate == null || delegate.mFonts == null || delegate.mFonts.size() == 0) {
             return;
         }
-
-        // FIXME should test if the main font can display all those characters.
-        // See MeasureText
-        if (delegate.mFonts.size() > 0) {
-            FontInfo mainInfo = delegate.mFonts.get(0);
-
-            Rectangle2D rect = mainInfo.mFont.getStringBounds(text, index, index + count,
-                    delegate.mFontContext);
-            bounds.set(0, 0, (int) rect.getWidth(), (int) rect.getHeight());
-        }
+        delegate.measureText(text, index, count, isRtl(bidiFlags)).roundOut(bounds);
     }
 
     @LayoutlibDelegate
-    /*package*/ static void finalizer(int nativePaint) {
+    /*package*/ static void finalizer(long nativePaint) {
         sManager.removeJavaReferenceFor(nativePaint);
     }
 
@@ -1176,6 +1145,7 @@ public class Paint_Delegate {
                     info.mFont = info.mFont.deriveFont(new AffineTransform(
                             mTextScaleX, mTextSkewX, 0, 1, 0, 0));
                 }
+                // The metrics here don't have anti-aliasing set.
                 info.mMetrics = Toolkit.getDefaultToolkit().getFontMetrics(info.mFont);
 
                 infoList.add(info);
@@ -1185,64 +1155,9 @@ public class Paint_Delegate {
         }
     }
 
-    /*package*/ float measureText(char[] text, int index, int count, int bidiFlags) {
-        // TODO: find out what bidiFlags actually does.
-
-        // WARNING: the logic in this method is similar to Canvas_Delegate.native_drawText
-        // Any change to this method should be reflected there as well
-
-        if (mFonts.size() > 0) {
-            FontInfo mainFont = mFonts.get(0);
-            int i = index;
-            int lastIndex = index + count;
-            float total = 0f;
-            while (i < lastIndex) {
-                // always start with the main font.
-                int upTo = mainFont.mFont.canDisplayUpTo(text, i, lastIndex);
-                if (upTo == -1) {
-                    // shortcut to exit
-                    return total + mainFont.mMetrics.charsWidth(text, i, lastIndex - i);
-                } else if (upTo > 0) {
-                    total += mainFont.mMetrics.charsWidth(text, i, upTo - i);
-                    i = upTo;
-                    // don't call continue at this point. Since it is certain the main font
-                    // cannot display the font a index upTo (now ==i), we move on to the
-                    // fallback fonts directly.
-                }
-
-                // no char supported, attempt to read the next char(s) with the
-                // fallback font. In this case we only test the first character
-                // and then go back to test with the main font.
-                // Special test for 2-char characters.
-                boolean foundFont = false;
-                for (int f = 1 ; f < mFonts.size() ; f++) {
-                    FontInfo fontInfo = mFonts.get(f);
-
-                    // need to check that the font can display the character. We test
-                    // differently if the char is a high surrogate.
-                    int charCount = Character.isHighSurrogate(text[i]) ? 2 : 1;
-                    upTo = fontInfo.mFont.canDisplayUpTo(text, i, i + charCount);
-                    if (upTo == -1) {
-                        total += fontInfo.mMetrics.charsWidth(text, i, charCount);
-                        i += charCount;
-                        foundFont = true;
-                        break;
-
-                    }
-                }
-
-                // in case no font can display the char, measure it with the main font.
-                if (foundFont == false) {
-                    int size = Character.isHighSurrogate(text[i]) ? 2 : 1;
-                    total += mainFont.mMetrics.charsWidth(text, i, size);
-                    i += size;
-                }
-            }
-
-            return total;
-        }
-
-        return 0;
+    /*package*/ RectF measureText(char[] text, int index, int count, boolean isRtl) {
+        return new BidiRenderer(null, this, text).renderText(
+                index, index + count, isRtl, null, 0, false, 0, 0);
     }
 
     private float getFontMetrics(FontMetrics metrics) {
@@ -1281,4 +1196,14 @@ public class Paint_Delegate {
         }
     }
 
+    private static boolean isRtl(int flag) {
+        switch(flag) {
+        case Paint.BIDI_RTL:
+        case Paint.BIDI_FORCE_RTL:
+        case Paint.BIDI_DEFAULT_RTL:
+            return true;
+        default:
+            return false;
+        }
+    }
 }

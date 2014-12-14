@@ -16,17 +16,22 @@
 
 package android.telephony;
 
+import android.annotation.PrivateApi;
 import android.annotation.SdkConstant;
 import android.annotation.SdkConstant.SdkConstantType;
 import android.content.Context;
 import android.os.Bundle;
+import android.os.Handler;
+import android.os.Message;
 import android.os.RemoteException;
 import android.os.ServiceManager;
 import android.os.SystemProperties;
 import android.telephony.Rlog;
+import android.util.Log;
 
 import com.android.internal.telephony.IPhoneSubInfo;
 import com.android.internal.telephony.ITelephony;
+import com.android.internal.telephony.ITelephonyListener;
 import com.android.internal.telephony.ITelephonyRegistry;
 import com.android.internal.telephony.PhoneConstants;
 import com.android.internal.telephony.RILConstants;
@@ -34,6 +39,7 @@ import com.android.internal.telephony.TelephonyProperties;
 
 import java.io.FileInputStream;
 import java.io.IOException;
+import java.util.HashMap;
 import java.util.List;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -60,7 +66,40 @@ public class TelephonyManager {
     private static final String TAG = "TelephonyManager";
 
     private static ITelephonyRegistry sRegistry;
+
+    private final HashMap<CallStateListener,Listener> mListeners
+            = new HashMap<CallStateListener,Listener>();
     private final Context mContext;
+
+    private static class Listener extends ITelephonyListener.Stub {
+        final CallStateListener mListener;
+        private static final int WHAT = 1;
+
+        private Handler mHandler = new Handler() {
+            @Override
+            public void handleMessage(Message msg) {
+                mListener.onCallStateChanged(msg.arg1, msg.arg2, (String)msg.obj);
+            }
+        };
+
+        Listener(CallStateListener listener) {
+            mListener = listener;
+        }
+
+        @Override
+        public void onUpdate(final int callId, final int state, final String number) {
+            if (mHandler != null) {
+                mHandler.sendMessage(mHandler.obtainMessage(WHAT, callId, state, number));
+            }
+        }
+
+        void clearQueue() {
+            mHandler.removeMessages(WHAT);
+
+            // Don't accept more incoming binder calls either.
+            mHandler = null;
+        }
+    }
 
     /** @hide */
     public TelephonyManager(Context context) {
@@ -127,19 +166,40 @@ public class TelephonyManager {
 
     /**
      * The Phone app sends this intent when a user opts to respond-via-message during an incoming
-     * call. By default, the MMS app consumes this message and sends a text message to the caller. A
-     * third party app can provide this functionality in lieu of MMS app by consuming this Intent
-     * and sending the message using their own messaging system.  The intent contains a URI
-     * describing the recipient, and an EXTRA containing the message itself.
-     * <p class="note"><strong>Note:</strong>
-     * The intent-filter which consumes this Intent needs to be in a service which requires the
-     * permission {@link android.Manifest.permission#SEND_RESPOND_VIA_MESSAGE}.</p>
+     * call. By default, the device's default SMS app consumes this message and sends a text message
+     * to the caller. A third party app can also provide this functionality by consuming this Intent
+     * with a {@link android.app.Service} and sending the message using its own messaging system.
+     * <p>The intent contains a URI (available from {@link android.content.Intent#getData})
+     * describing the recipient, using either the {@code sms:}, {@code smsto:}, {@code mms:},
+     * or {@code mmsto:} URI schema. Each of these URI schema carry the recipient information the
+     * same way: the path part of the URI contains the recipient's phone number or a comma-separated
+     * set of phone numbers if there are multiple recipients. For example, {@code
+     * smsto:2065551234}.</p>
      *
-     * <p>
-     * {@link android.content.Intent#getData} is a URI describing the recipient of the message.
-     * <p>
-     * The {@link android.content.Intent#EXTRA_TEXT} extra contains the message
-     * to send.
+     * <p>The intent may also contain extras for the message text (in {@link
+     * android.content.Intent#EXTRA_TEXT}) and a message subject
+     * (in {@link android.content.Intent#EXTRA_SUBJECT}).</p>
+     *
+     * <p class="note"><strong>Note:</strong>
+     * The intent-filter that consumes this Intent needs to be in a {@link android.app.Service}
+     * that requires the
+     * permission {@link android.Manifest.permission#SEND_RESPOND_VIA_MESSAGE}.</p>
+     * <p>For example, the service that receives this intent can be declared in the manifest file
+     * with an intent filter like this:</p>
+     * <pre>
+     * &lt;!-- Service that delivers SMS messages received from the phone "quick response" -->
+     * &lt;service android:name=".HeadlessSmsSendService"
+     *          android:permission="android.permission.SEND_RESPOND_VIA_MESSAGE"
+     *          android:exported="true" >
+     *   &lt;intent-filter>
+     *     &lt;action android:name="android.intent.action.RESPOND_VIA_MESSAGE" />
+     *     &lt;category android:name="android.intent.category.DEFAULT" />
+     *     &lt;data android:scheme="sms" />
+     *     &lt;data android:scheme="smsto" />
+     *     &lt;data android:scheme="mms" />
+     *     &lt;data android:scheme="mmsto" />
+     *   &lt;/intent-filter>
+     * &lt;/service></pre>
      * <p>
      * Output: nothing.
      */
@@ -190,6 +250,267 @@ public class TelephonyManager {
      */
     public static final String EXTRA_INCOMING_NUMBER = "incoming_number";
 
+    /**
+     * Broadcast intent action indicating that a precise call state
+     * (cellular) on the device has changed.
+     *
+     * <p>
+     * The {@link #EXTRA_RINGING_CALL_STATE} extra indicates the ringing call state.
+     * The {@link #EXTRA_FOREGROUND_CALL_STATE} extra indicates the foreground call state.
+     * The {@link #EXTRA_BACKGROUND_CALL_STATE} extra indicates the background call state.
+     * The {@link #EXTRA_DISCONNECT_CAUSE} extra indicates the disconnect cause.
+     * The {@link #EXTRA_PRECISE_DISCONNECT_CAUSE} extra indicates the precise disconnect cause.
+     *
+     * <p class="note">
+     * Requires the READ_PRECISE_PHONE_STATE permission.
+     *
+     * @see #EXTRA_RINGING_CALL_STATE
+     * @see #EXTRA_FOREGROUND_CALL_STATE
+     * @see #EXTRA_BACKGROUND_CALL_STATE
+     * @see #EXTRA_DISCONNECT_CAUSE
+     * @see #EXTRA_PRECISE_DISCONNECT_CAUSE
+     *
+     * <p class="note">
+     * Requires the READ_PRECISE_PHONE_STATE permission.
+     *
+     * @hide
+     */
+    @SdkConstant(SdkConstantType.BROADCAST_INTENT_ACTION)
+    public static final String ACTION_PRECISE_CALL_STATE_CHANGED =
+            "android.intent.action.PRECISE_CALL_STATE";
+
+    /**
+     * The lookup key used with the {@link #ACTION_PRECISE_CALL_STATE_CHANGED} broadcast
+     * for an integer containing the state of the current ringing call.
+     *
+     * @see PreciseCallState#PRECISE_CALL_STATE_NOT_VALID
+     * @see PreciseCallState#PRECISE_CALL_STATE_IDLE
+     * @see PreciseCallState#PRECISE_CALL_STATE_ACTIVE
+     * @see PreciseCallState#PRECISE_CALL_STATE_HOLDING
+     * @see PreciseCallState#PRECISE_CALL_STATE_DIALING
+     * @see PreciseCallState#PRECISE_CALL_STATE_ALERTING
+     * @see PreciseCallState#PRECISE_CALL_STATE_INCOMING
+     * @see PreciseCallState#PRECISE_CALL_STATE_WAITING
+     * @see PreciseCallState#PRECISE_CALL_STATE_DISCONNECTED
+     * @see PreciseCallState#PRECISE_CALL_STATE_DISCONNECTING
+     *
+     * <p class="note">
+     * Retrieve with
+     * {@link android.content.Intent#getIntExtra(String name, int defaultValue)}.
+     *
+     * @hide
+     */
+    public static final String EXTRA_RINGING_CALL_STATE = "ringing_state";
+
+    /**
+     * The lookup key used with the {@link #ACTION_PRECISE_CALL_STATE_CHANGED} broadcast
+     * for an integer containing the state of the current foreground call.
+     *
+     * @see PreciseCallState#PRECISE_CALL_STATE_NOT_VALID
+     * @see PreciseCallState#PRECISE_CALL_STATE_IDLE
+     * @see PreciseCallState#PRECISE_CALL_STATE_ACTIVE
+     * @see PreciseCallState#PRECISE_CALL_STATE_HOLDING
+     * @see PreciseCallState#PRECISE_CALL_STATE_DIALING
+     * @see PreciseCallState#PRECISE_CALL_STATE_ALERTING
+     * @see PreciseCallState#PRECISE_CALL_STATE_INCOMING
+     * @see PreciseCallState#PRECISE_CALL_STATE_WAITING
+     * @see PreciseCallState#PRECISE_CALL_STATE_DISCONNECTED
+     * @see PreciseCallState#PRECISE_CALL_STATE_DISCONNECTING
+     *
+     * <p class="note">
+     * Retrieve with
+     * {@link android.content.Intent#getIntExtra(String name, int defaultValue)}.
+     *
+     * @hide
+     */
+    public static final String EXTRA_FOREGROUND_CALL_STATE = "foreground_state";
+
+    /**
+     * The lookup key used with the {@link #ACTION_PRECISE_CALL_STATE_CHANGED} broadcast
+     * for an integer containing the state of the current background call.
+     *
+     * @see PreciseCallState#PRECISE_CALL_STATE_NOT_VALID
+     * @see PreciseCallState#PRECISE_CALL_STATE_IDLE
+     * @see PreciseCallState#PRECISE_CALL_STATE_ACTIVE
+     * @see PreciseCallState#PRECISE_CALL_STATE_HOLDING
+     * @see PreciseCallState#PRECISE_CALL_STATE_DIALING
+     * @see PreciseCallState#PRECISE_CALL_STATE_ALERTING
+     * @see PreciseCallState#PRECISE_CALL_STATE_INCOMING
+     * @see PreciseCallState#PRECISE_CALL_STATE_WAITING
+     * @see PreciseCallState#PRECISE_CALL_STATE_DISCONNECTED
+     * @see PreciseCallState#PRECISE_CALL_STATE_DISCONNECTING
+     *
+     * <p class="note">
+     * Retrieve with
+     * {@link android.content.Intent#getIntExtra(String name, int defaultValue)}.
+     *
+     * @hide
+     */
+    public static final String EXTRA_BACKGROUND_CALL_STATE = "background_state";
+
+    /**
+     * The lookup key used with the {@link #ACTION_PRECISE_CALL_STATE_CHANGED} broadcast
+     * for an integer containing the disconnect cause.
+     *
+     * @see DisconnectCause
+     *
+     * <p class="note">
+     * Retrieve with
+     * {@link android.content.Intent#getIntExtra(String name, int defaultValue)}.
+     *
+     * @hide
+     */
+    public static final String EXTRA_DISCONNECT_CAUSE = "disconnect_cause";
+
+    /**
+     * The lookup key used with the {@link #ACTION_PRECISE_CALL_STATE_CHANGED} broadcast
+     * for an integer containing the disconnect cause provided by the RIL.
+     *
+     * @see PreciseDisconnectCause
+     *
+     * <p class="note">
+     * Retrieve with
+     * {@link android.content.Intent#getIntExtra(String name, int defaultValue)}.
+     *
+     * @hide
+     */
+    public static final String EXTRA_PRECISE_DISCONNECT_CAUSE = "precise_disconnect_cause";
+
+    /**
+     * Broadcast intent action indicating a data connection has changed,
+     * providing precise information about the connection.
+     *
+     * <p>
+     * The {@link #EXTRA_DATA_STATE} extra indicates the connection state.
+     * The {@link #EXTRA_DATA_NETWORK_TYPE} extra indicates the connection network type.
+     * The {@link #EXTRA_DATA_APN_TYPE} extra indicates the APN type.
+     * The {@link #EXTRA_DATA_APN} extra indicates the APN.
+     * The {@link #EXTRA_DATA_CHANGE_REASON} extra indicates the connection change reason.
+     * The {@link #EXTRA_DATA_IFACE_PROPERTIES} extra indicates the connection interface.
+     * The {@link #EXTRA_DATA_FAILURE_CAUSE} extra indicates the connection fail cause.
+     *
+     * <p class="note">
+     * Requires the READ_PRECISE_PHONE_STATE permission.
+     *
+     * @see #EXTRA_DATA_STATE
+     * @see #EXTRA_DATA_NETWORK_TYPE
+     * @see #EXTRA_DATA_APN_TYPE
+     * @see #EXTRA_DATA_APN
+     * @see #EXTRA_DATA_CHANGE_REASON
+     * @see #EXTRA_DATA_IFACE
+     * @see #EXTRA_DATA_FAILURE_CAUSE
+     * @hide
+     */
+    @SdkConstant(SdkConstantType.BROADCAST_INTENT_ACTION)
+    public static final String ACTION_PRECISE_DATA_CONNECTION_STATE_CHANGED =
+            "android.intent.action.PRECISE_DATA_CONNECTION_STATE_CHANGED";
+
+    /**
+     * The lookup key used with the {@link #ACTION_PRECISE_DATA_CONNECTION_STATE_CHANGED} broadcast
+     * for an integer containing the state of the current data connection.
+     *
+     * @see TelephonyManager#DATA_UNKNOWN
+     * @see TelephonyManager#DATA_DISCONNECTED
+     * @see TelephonyManager#DATA_CONNECTING
+     * @see TelephonyManager#DATA_CONNECTED
+     * @see TelephonyManager#DATA_SUSPENDED
+     *
+     * <p class="note">
+     * Retrieve with
+     * {@link android.content.Intent#getIntExtra(String name, int defaultValue)}.
+     *
+     * @hide
+     */
+    public static final String EXTRA_DATA_STATE = PhoneConstants.STATE_KEY;
+
+    /**
+     * The lookup key used with the {@link #ACTION_PRECISE_DATA_CONNECTION_STATE_CHANGED} broadcast
+     * for an integer containing the network type.
+     *
+     * @see TelephonyManager#NETWORK_TYPE_UNKNOWN
+     * @see TelephonyManager#NETWORK_TYPE_GPRS
+     * @see TelephonyManager#NETWORK_TYPE_EDGE
+     * @see TelephonyManager#NETWORK_TYPE_UMTS
+     * @see TelephonyManager#NETWORK_TYPE_CDMA
+     * @see TelephonyManager#NETWORK_TYPE_EVDO_0
+     * @see TelephonyManager#NETWORK_TYPE_EVDO_A
+     * @see TelephonyManager#NETWORK_TYPE_1xRTT
+     * @see TelephonyManager#NETWORK_TYPE_HSDPA
+     * @see TelephonyManager#NETWORK_TYPE_HSUPA
+     * @see TelephonyManager#NETWORK_TYPE_HSPA
+     * @see TelephonyManager#NETWORK_TYPE_IDEN
+     * @see TelephonyManager#NETWORK_TYPE_EVDO_B
+     * @see TelephonyManager#NETWORK_TYPE_LTE
+     * @see TelephonyManager#NETWORK_TYPE_EHRPD
+     * @see TelephonyManager#NETWORK_TYPE_HSPAP
+     *
+     * <p class="note">
+     * Retrieve with
+     * {@link android.content.Intent#getIntExtra(String name, int defaultValue)}.
+     *
+     * @hide
+     */
+    public static final String EXTRA_DATA_NETWORK_TYPE = PhoneConstants.DATA_NETWORK_TYPE_KEY;
+
+    /**
+     * The lookup key used with the {@link #ACTION_PRECISE_DATA_CONNECTION_STATE_CHANGED} broadcast
+     * for an String containing the data APN type.
+     *
+     * <p class="note">
+     * Retrieve with
+     * {@link android.content.Intent#getStringExtra(String name)}.
+     *
+     * @hide
+     */
+    public static final String EXTRA_DATA_APN_TYPE = PhoneConstants.DATA_APN_TYPE_KEY;
+
+    /**
+     * The lookup key used with the {@link #ACTION_PRECISE_DATA_CONNECTION_STATE_CHANGED} broadcast
+     * for an String containing the data APN.
+     *
+     * <p class="note">
+     * Retrieve with
+     * {@link android.content.Intent#getStringExtra(String name)}.
+     *
+     * @hide
+     */
+    public static final String EXTRA_DATA_APN = PhoneConstants.DATA_APN_KEY;
+
+    /**
+     * The lookup key used with the {@link #ACTION_PRECISE_DATA_CONNECTION_STATE_CHANGED} broadcast
+     * for an String representation of the change reason.
+     *
+     * <p class="note">
+     * Retrieve with
+     * {@link android.content.Intent#getStringExtra(String name)}.
+     *
+     * @hide
+     */
+    public static final String EXTRA_DATA_CHANGE_REASON = PhoneConstants.STATE_CHANGE_REASON_KEY;
+
+    /**
+     * The lookup key used with the {@link #ACTION_PRECISE_DATA_CONNECTION_STATE_CHANGED} broadcast
+     * for an String representation of the data interface.
+     *
+     * <p class="note">
+     * Retrieve with
+     * {@link android.content.Intent#getParcelableExtra(String name)}.
+     *
+     * @hide
+     */
+    public static final String EXTRA_DATA_LINK_PROPERTIES_KEY = PhoneConstants.DATA_LINK_PROPERTIES_KEY;
+
+    /**
+     * The lookup key used with the {@link #ACTION_PRECISE_DATA_CONNECTION_STATE_CHANGED} broadcast
+     * for the data connection fail cause.
+     *
+     * <p class="note">
+     * Retrieve with
+     * {@link android.content.Intent#getStringExtra(String name)}.
+     *
+     * @hide
+     */
+    public static final String EXTRA_DATA_FAILURE_CAUSE = PhoneConstants.DATA_FAILURE_CAUSE_KEY;
 
     //
     //
@@ -309,7 +630,7 @@ public class TelephonyManager {
      */
     public List<NeighboringCellInfo> getNeighboringCellInfo() {
         try {
-            return getITelephony().getNeighboringCellInfo(mContext.getBasePackageName());
+            return getITelephony().getNeighboringCellInfo(mContext.getOpPackageName());
         } catch (RemoteException ex) {
             return null;
         } catch (NullPointerException ex) {
@@ -412,12 +733,12 @@ public class TelephonyManager {
         case RILConstants.NETWORK_MODE_GSM_UMTS:
         case RILConstants.NETWORK_MODE_LTE_GSM_WCDMA:
         case RILConstants.NETWORK_MODE_LTE_WCDMA:
+        case RILConstants.NETWORK_MODE_LTE_CMDA_EVDO_GSM_WCDMA:
             return PhoneConstants.PHONE_TYPE_GSM;
 
         // Use CDMA Phone for the global mode including CDMA
         case RILConstants.NETWORK_MODE_GLOBAL:
         case RILConstants.NETWORK_MODE_LTE_CDMA_EVDO:
-        case RILConstants.NETWORK_MODE_LTE_CMDA_EVDO_GSM_WCDMA:
             return PhoneConstants.PHONE_TYPE_CDMA;
 
         case RILConstants.NETWORK_MODE_LTE_ONLY:
@@ -590,6 +911,8 @@ public class TelephonyManager {
     public static final int NETWORK_TYPE_EHRPD = 14;
     /** Current network is HSPA+ */
     public static final int NETWORK_TYPE_HSPAP = 15;
+    /** Current network is GSM {@hide} */
+    public static final int NETWORK_TYPE_GSM = 16;
 
     /**
      * @return the NETWORK_TYPE_xxxx for current data connection.
@@ -681,6 +1004,7 @@ public class TelephonyManager {
     public static int getNetworkClass(int networkType) {
         switch (networkType) {
             case NETWORK_TYPE_GPRS:
+            case NETWORK_TYPE_GSM:
             case NETWORK_TYPE_EDGE:
             case NETWORK_TYPE_CDMA:
             case NETWORK_TYPE_1xRTT:
@@ -747,6 +1071,8 @@ public class TelephonyManager {
                 return "iDEN";
             case NETWORK_TYPE_HSPAP:
                 return "HSPA+";
+            case NETWORK_TYPE_GSM:
+                return "GSM";
             default:
                 return "UNKNOWN";
         }
@@ -773,6 +1099,10 @@ public class TelephonyManager {
     public static final int SIM_STATE_NETWORK_LOCKED = 4;
     /** SIM card state: Ready */
     public static final int SIM_STATE_READY = 5;
+    /** SIM card state: SIM Card Error, Sim Card is present but faulty
+     *@hide
+     */
+    public static final int SIM_STATE_CARD_IO_ERROR = 6;
 
     /**
      * @return true if a ICC card is present
@@ -799,6 +1129,7 @@ public class TelephonyManager {
      * @see #SIM_STATE_PUK_REQUIRED
      * @see #SIM_STATE_NETWORK_LOCKED
      * @see #SIM_STATE_READY
+     * @see #SIM_STATE_CARD_IO_ERROR
      */
     public int getSimState() {
         String prop = SystemProperties.get(TelephonyProperties.PROPERTY_SIM_STATE);
@@ -816,6 +1147,9 @@ public class TelephonyManager {
         }
         else if ("READY".equals(prop)) {
             return SIM_STATE_READY;
+        }
+        else if ("CARD_IO_ERROR".equals(prop)) {
+            return SIM_STATE_CARD_IO_ERROR;
         }
         else {
             return SIM_STATE_UNKNOWN;
@@ -1398,6 +1732,417 @@ public class TelephonyManager {
             getITelephony().setCellInfoListRate(rateInMillis);
         } catch (RemoteException ex) {
         } catch (NullPointerException ex) {
+        }
+    }
+
+    /**
+     * Returns the MMS user agent.
+     */
+    public String getMmsUserAgent() {
+        if (mContext == null) return null;
+        return mContext.getResources().getString(
+                com.android.internal.R.string.config_mms_user_agent);
+    }
+
+    /**
+     * Returns the MMS user agent profile URL.
+     */
+    public String getMmsUAProfUrl() {
+        if (mContext == null) return null;
+        return mContext.getResources().getString(
+                com.android.internal.R.string.config_mms_user_agent_profile_url);
+    }
+
+    /** @hide */
+    @PrivateApi
+    public void dial(String number) {
+        try {
+            getITelephony().dial(number);
+        } catch (RemoteException e) {
+            Log.e(TAG, "Error calling ITelephony#dial", e);
+        }
+    }
+
+    /** @hide */
+    @PrivateApi
+    public void call(String callingPackage, String number) {
+        try {
+            getITelephony().call(callingPackage, number);
+        } catch (RemoteException e) {
+            Log.e(TAG, "Error calling ITelephony#call", e);
+        }
+    }
+
+    /** @hide */
+    @PrivateApi
+    public boolean showCallScreen() {
+        try {
+            return getITelephony().showCallScreen();
+        } catch (RemoteException e) {
+            Log.e(TAG, "Error calling ITelephony#showCallScreen", e);
+        }
+        return false;
+    }
+
+    /** @hide */
+    @PrivateApi
+    public boolean showCallScreenWithDialpad(boolean showDialpad) {
+        try {
+            return getITelephony().showCallScreenWithDialpad(showDialpad);
+        } catch (RemoteException e) {
+            Log.e(TAG, "Error calling ITelephony#showCallScreenWithDialpad", e);
+        }
+        return false;
+    }
+
+    /** @hide */
+    @PrivateApi
+    public boolean endCall() {
+        try {
+            return getITelephony().endCall();
+        } catch (RemoteException e) {
+            Log.e(TAG, "Error calling ITelephony#endCall", e);
+        }
+        return false;
+    }
+
+    /** @hide */
+    @PrivateApi
+    public void answerRingingCall() {
+        try {
+            getITelephony().answerRingingCall();
+        } catch (RemoteException e) {
+            Log.e(TAG, "Error calling ITelephony#answerRingingCall", e);
+        }
+    }
+
+    /** @hide */
+    @PrivateApi
+    public void toggleHold() {
+        try {
+            getITelephony().toggleHold();
+        } catch (RemoteException e) {
+            Log.e(TAG, "Error calling ITelephony#toggleHold", e);
+        }
+    }
+
+    /** @hide */
+    @PrivateApi
+    public void merge() {
+        try {
+            getITelephony().merge();
+        } catch (RemoteException e) {
+            Log.e(TAG, "Error calling ITelephony#merge", e);
+        }
+    }
+
+    /** @hide */
+    @PrivateApi
+    public void swap() {
+        try {
+            getITelephony().swap();
+        } catch (RemoteException e) {
+            Log.e(TAG, "Error calling ITelephony#swap", e);
+        }
+    }
+
+    /** @hide */
+    @PrivateApi
+    public void mute(boolean mute) {
+        try {
+            getITelephony().mute(mute);
+        } catch (RemoteException e) {
+            Log.e(TAG, "Error calling ITelephony#mute", e);
+        }
+    }
+
+    /** @hide */
+    @PrivateApi
+    public void silenceRinger() {
+        try {
+            getITelephony().silenceRinger();
+        } catch (RemoteException e) {
+            Log.e(TAG, "Error calling ITelephony#silenceRinger", e);
+        }
+    }
+
+    /** @hide */
+    @PrivateApi
+    public boolean isOffhook() {
+        try {
+            return getITelephony().isOffhook();
+        } catch (RemoteException e) {
+            Log.e(TAG, "Error calling ITelephony#isOffhook", e);
+        }
+        return false;
+    }
+
+    /** @hide */
+    @PrivateApi
+    public boolean isRinging() {
+        try {
+            return getITelephony().isRinging();
+        } catch (RemoteException e) {
+            Log.e(TAG, "Error calling ITelephony#isRinging", e);
+        }
+        return false;
+    }
+
+    /** @hide */
+    @PrivateApi
+    public boolean isIdle() {
+        try {
+            return getITelephony().isIdle();
+        } catch (RemoteException e) {
+            Log.e(TAG, "Error calling ITelephony#isIdle", e);
+        }
+        return true;
+    }
+
+    /** @hide */
+    @PrivateApi
+    public boolean isRadioOn() {
+        try {
+            return getITelephony().isRadioOn();
+        } catch (RemoteException e) {
+            Log.e(TAG, "Error calling ITelephony#isRadioOn", e);
+        }
+        return false;
+    }
+
+    /** @hide */
+    @PrivateApi
+    public boolean isSimPinEnabled() {
+        try {
+            return getITelephony().isSimPinEnabled();
+        } catch (RemoteException e) {
+            Log.e(TAG, "Error calling ITelephony#isSimPinEnabled", e);
+        }
+        return false;
+    }
+
+    /** @hide */
+    @PrivateApi
+    public void cancelMissedCallsNotification() {
+        try {
+            getITelephony().cancelMissedCallsNotification();
+        } catch (RemoteException e) {
+            Log.e(TAG, "Error calling ITelephony#cancelMissedCallsNotification", e);
+        }
+    }
+
+    /** @hide */
+    @PrivateApi
+    public boolean supplyPin(String pin) {
+        try {
+            return getITelephony().supplyPin(pin);
+        } catch (RemoteException e) {
+            Log.e(TAG, "Error calling ITelephony#supplyPin", e);
+        }
+        return false;
+    }
+
+    /** @hide */
+    @PrivateApi
+    public boolean supplyPuk(String puk, String pin) {
+        try {
+            return getITelephony().supplyPuk(puk, pin);
+        } catch (RemoteException e) {
+            Log.e(TAG, "Error calling ITelephony#supplyPuk", e);
+        }
+        return false;
+    }
+
+    /** @hide */
+    @PrivateApi
+    public int[] supplyPinReportResult(String pin) {
+        try {
+            return getITelephony().supplyPinReportResult(pin);
+        } catch (RemoteException e) {
+            Log.e(TAG, "Error calling ITelephony#supplyPinReportResult", e);
+        }
+        return new int[0];
+    }
+
+    /** @hide */
+    @PrivateApi
+    public int[] supplyPukReportResult(String puk, String pin) {
+        try {
+            return getITelephony().supplyPukReportResult(puk, pin);
+        } catch (RemoteException e) {
+            Log.e(TAG, "Error calling ITelephony#]", e);
+        }
+        return new int[0];
+    }
+
+    /** @hide */
+    @PrivateApi
+    public boolean handlePinMmi(String dialString) {
+        try {
+            return getITelephony().handlePinMmi(dialString);
+        } catch (RemoteException e) {
+            Log.e(TAG, "Error calling ITelephony#handlePinMmi", e);
+        }
+        return false;
+    }
+
+    /** @hide */
+    @PrivateApi
+    public void toggleRadioOnOff() {
+        try {
+            getITelephony().toggleRadioOnOff();
+        } catch (RemoteException e) {
+            Log.e(TAG, "Error calling ITelephony#toggleRadioOnOff", e);
+        }
+    }
+
+    /** @hide */
+    @PrivateApi
+    public boolean setRadio(boolean turnOn) {
+        try {
+            return getITelephony().setRadio(turnOn);
+        } catch (RemoteException e) {
+            Log.e(TAG, "Error calling ITelephony#setRadio", e);
+        }
+        return false;
+    }
+
+    /** @hide */
+    @PrivateApi
+    public boolean setRadioPower(boolean turnOn) {
+        try {
+            return getITelephony().setRadioPower(turnOn);
+        } catch (RemoteException e) {
+            Log.e(TAG, "Error calling ITelephony#setRadioPower", e);
+        }
+        return false;
+    }
+
+    /** @hide */
+    @PrivateApi
+    public void updateServiceLocation() {
+        try {
+            getITelephony().updateServiceLocation();
+        } catch (RemoteException e) {
+            Log.e(TAG, "Error calling ITelephony#updateServiceLocation", e);
+        }
+    }
+
+    /** @hide */
+    @PrivateApi
+    public int enableApnType(String type) {
+        try {
+            return getITelephony().enableApnType(type);
+        } catch (RemoteException e) {
+            Log.e(TAG, "Error calling ITelephony#enableApnType", e);
+        }
+        return PhoneConstants.APN_REQUEST_FAILED;
+    }
+
+    /** @hide */
+    @PrivateApi
+    public int disableApnType(String type) {
+        try {
+            return getITelephony().disableApnType(type);
+        } catch (RemoteException e) {
+            Log.e(TAG, "Error calling ITelephony#disableApnType", e);
+        }
+        return PhoneConstants.APN_REQUEST_FAILED;
+    }
+
+    /** @hide */
+    @PrivateApi
+    public boolean enableDataConnectivity() {
+        try {
+            return getITelephony().enableDataConnectivity();
+        } catch (RemoteException e) {
+            Log.e(TAG, "Error calling ITelephony#enableDataConnectivity", e);
+        }
+        return false;
+    }
+
+    /** @hide */
+    @PrivateApi
+    public boolean disableDataConnectivity() {
+        try {
+            return getITelephony().disableDataConnectivity();
+        } catch (RemoteException e) {
+            Log.e(TAG, "Error calling ITelephony#disableDataConnectivity", e);
+        }
+        return false;
+    }
+
+    /** @hide */
+    @PrivateApi
+    public boolean isDataConnectivityPossible() {
+        try {
+            return getITelephony().isDataConnectivityPossible();
+        } catch (RemoteException e) {
+            Log.e(TAG, "Error calling ITelephony#isDataConnectivityPossible", e);
+        }
+        return false;
+    }
+
+    /** @hide */
+    @PrivateApi
+    public boolean needsOtaServiceProvisioning() {
+        try {
+            return getITelephony().needsOtaServiceProvisioning();
+        } catch (RemoteException e) {
+            Log.e(TAG, "Error calling ITelephony#needsOtaServiceProvisioning", e);
+        }
+        return false;
+    }
+
+    /** @hide */
+    @PrivateApi
+    public void playDtmfTone(char digit, boolean timedShortCode) {
+        try {
+            getITelephony().playDtmfTone(digit, timedShortCode);
+        } catch (RemoteException e) {
+            Log.e(TAG, "Error calling ITelephony#playDtmfTone", e);
+        }
+    }
+
+    /** @hide */
+    @PrivateApi
+    public void stopDtmfTone() {
+        try {
+            getITelephony().stopDtmfTone();
+        } catch (RemoteException e) {
+            Log.e(TAG, "Error calling ITelephony#stopDtmfTone", e);
+        }
+    }
+
+    /** @hide */
+    @PrivateApi
+    public void addCallStateListener(CallStateListener listener) {
+        try {
+            if (listener == null) {
+                throw new RuntimeException("Listener can't be null");
+            }
+            if (!mListeners.containsKey(listener)) {
+                final Listener l = new Listener(listener);
+                mListeners.put(listener, l);
+                getITelephony().addListener(l);
+            }
+        } catch (RemoteException e) {
+            Log.e(TAG, "Error calling ITelephony#addListener", e);
+        }
+    }
+
+    /** @hide */
+    @PrivateApi
+    public void removeCallStateListener(CallStateListener listener) {
+        try {
+            final Listener l = mListeners.remove(listener);
+            if (l != null) {
+                // Make sure that no callbacks that are already in flight come.
+                l.clearQueue();
+                getITelephony().removeListener(l);
+            }
+        } catch (RemoteException e) {
+            Log.e(TAG, "Error calling ITelephony#removeListener", e);
         }
     }
 }

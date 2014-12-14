@@ -59,7 +59,7 @@ import java.util.List;
 import java.util.Locale;
 
 /**
- * A widget that enables the user to select a number form a predefined range.
+ * A widget that enables the user to select a number from a predefined range.
  * There are two flavors of this widget and which one is presented to the user
  * depends on the current theme.
  * <ul>
@@ -1099,6 +1099,21 @@ public class NumberPicker extends LinearLayout {
     }
 
     @Override
+    protected int computeVerticalScrollOffset() {
+        return mCurrentScrollOffset;
+    }
+
+    @Override
+    protected int computeVerticalScrollRange() {
+        return (mMaxValue - mMinValue + 1) * mSelectorElementHeight;
+    }
+
+    @Override
+    protected int computeVerticalScrollExtent() {
+        return getHeight();
+    }
+
+    @Override
     public int getSolidColor() {
         return mSolidColor;
     }
@@ -1425,6 +1440,7 @@ public class NumberPicker extends LinearLayout {
 
     @Override
     protected void onDetachedFromWindow() {
+        super.onDetachedFromWindow();
         removeAllCallbacks();
     }
 
@@ -1928,7 +1944,16 @@ public class NumberPicker extends LinearLayout {
             , '\u0669',
             // Extended Arabic-Indic
             '\u06f0', '\u06f1', '\u06f2', '\u06f3', '\u06f4', '\u06f5', '\u06f6', '\u06f7', '\u06f8'
-            , '\u06f9'
+            , '\u06f9',
+            // Hindi and Marathi (Devanagari script)
+            '\u0966', '\u0967', '\u0968', '\u0969', '\u096a', '\u096b', '\u096c', '\u096d', '\u096e'
+            , '\u096f',
+            // Bengali
+            '\u09e6', '\u09e7', '\u09e8', '\u09e9', '\u09ea', '\u09eb', '\u09ec', '\u09ed', '\u09ee'
+            , '\u09ef',
+            // Kannada
+            '\u0ce6', '\u0ce7', '\u0ce8', '\u0ce9', '\u0cea', '\u0ceb', '\u0cec', '\u0ced', '\u0cee'
+            , '\u0cef'
     };
 
     /**

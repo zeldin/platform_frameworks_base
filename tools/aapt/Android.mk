@@ -7,10 +7,8 @@
 # This tool is prebuilt if we're doing an app-only build.
 ifeq ($(TARGET_BUILD_APPS),)
 
-LOCAL_PATH:= $(call my-dir)
-include $(CLEAR_VARS)
 
-LOCAL_SRC_FILES := \
+aapt_src_files := \
 	AaptAssets.cpp \
 	Command.cpp \
 	CrunchCache.cpp \
@@ -24,29 +22,37 @@ LOCAL_SRC_FILES := \
 	ResourceTable.cpp \
 	Images.cpp \
 	Resource.cpp \
+    pseudolocalize.cpp \
     SourcePos.cpp \
+	WorkQueue.cpp \
     ZipEntry.cpp \
-    ZipFile.cpp
+    ZipFile.cpp \
 
+LOCAL_PATH:= $(call my-dir)
+include $(CLEAR_VARS)
+LOCAL_ADDITIONAL_DEPENDENCIES := $(LOCAL_PATH)/Android.mk
+
+LOCAL_SRC_FILES := $(aapt_src_files)
 
 LOCAL_CFLAGS += -Wno-format-y2k
 ifeq (darwin,$(HOST_OS))
 LOCAL_CFLAGS += -D_DARWIN_UNLIMITED_STREAMS
 endif
 
+LOCAL_CFLAGS += -DSTATIC_ANDROIDFW_FOR_TOOLS
+LOCAL_CFLAGS += -Wall -Werror
 
 LOCAL_C_INCLUDES += external/libpng
 LOCAL_C_INCLUDES += external/zlib
-LOCAL_C_INCLUDES += build/libs/host/include
 
 LOCAL_STATIC_LIBRARIES := \
-	libhost \
 	libandroidfw \
 	libutils \
 	libcutils \
 	libexpat \
 	libpng \
-	liblog
+	liblog \
+	libziparchive-host
 
 ifeq ($(HOST_OS),linux)
 LOCAL_LDLIBS += -lrt -ldl -lpthread
@@ -63,5 +69,36 @@ endif
 LOCAL_MODULE := aapt
 
 include $(BUILD_HOST_EXECUTABLE)
+
+# aapt for running on the device
+# =========================================================
+ifneq ($(SDK_ONLY),true)
+include $(CLEAR_VARS)
+LOCAL_ADDITIONAL_DEPENDENCIES := $(LOCAL_PATH)/Android.mk
+
+LOCAL_SRC_FILES := $(aapt_src_files)
+
+LOCAL_MODULE := aapt
+
+LOCAL_C_INCLUDES += external/libpng
+LOCAL_C_INCLUDES += external/zlib
+
+LOCAL_CFLAGS += -Wno-non-virtual-dtor
+LOCAL_CFLAGS += -Wall -Werror
+
+LOCAL_SHARED_LIBRARIES := \
+        libandroidfw \
+        libutils \
+        libcutils \
+        libpng \
+        liblog \
+        libz
+
+LOCAL_STATIC_LIBRARIES := \
+        libexpat_static
+
+include external/stlport/libstlport.mk
+include $(BUILD_EXECUTABLE)
+endif
 
 endif # TARGET_BUILD_APPS

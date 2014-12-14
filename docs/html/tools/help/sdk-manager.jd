@@ -9,6 +9,8 @@ page.title=SDK Manager
 <ul>
   <li>From Eclipse (with <a href="{@docRoot}tools/help/adt.html">ADT</a>),
   select <strong>Window</strong> &gt; <strong>Android SDK Manager</strong>.</li>
+  <li>From Android Studio, select <strong>Tools</strong> &gt; <strong>Android</strong>
+  &gt; <strong>SDK Manager</strong>.</li>
   <li>On Windows, double-click the <code>SDK Manager.exe</code> file at the root of the Android
 SDK directory.</li>
   <li>On Mac or Linux, open a terminal and navigate to the <code>tools/</code> directory in the
@@ -55,7 +57,7 @@ plus others not included in the framework at all) on devices running
 a platform version as old as Android 1.6. All of the activity templates available when creating
 a new project with the <a href="{@docRoot}tools/sdk/eclipse-adt.html">ADT Plugin</a>
 require this. For more information, read <a
-href="{@docRoot}tools/extras/support-library.html">Support Library</a>.</dd>
+href="{@docRoot}tools/support-library/index.html">Support Library</a>.</dd>
   <dt>SDK Samples</dt>
   <dd>Recommended. The samples give you source code that you can use to learn about
 Android, load as a project and run, or reuse in your own app. Note that multiple

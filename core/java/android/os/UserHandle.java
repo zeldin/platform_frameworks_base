@@ -145,6 +145,14 @@ public final class UserHandle implements Parcelable {
     }
 
     /**
+     * Returns the gid shared between all apps with this userId.
+     * @hide
+     */
+    public static final int getUserGid(int userId) {
+        return getUid(userId, Process.SHARED_USER_GID);
+    }
+
+    /**
      * Returns the shared app gid for a given uid or appId.
      * @hide
      */
@@ -168,8 +176,11 @@ public final class UserHandle implements Parcelable {
             if (appId >= Process.FIRST_ISOLATED_UID && appId <= Process.LAST_ISOLATED_UID) {
                 sb.append('i');
                 sb.append(appId - Process.FIRST_ISOLATED_UID);
-            } else {
+            } else if (appId >= Process.FIRST_APPLICATION_UID) {
                 sb.append('a');
+                sb.append(appId - Process.FIRST_APPLICATION_UID);
+            } else {
+                sb.append('s');
                 sb.append(appId);
             }
         }
@@ -190,8 +201,11 @@ public final class UserHandle implements Parcelable {
             if (appId >= Process.FIRST_ISOLATED_UID && appId <= Process.LAST_ISOLATED_UID) {
                 pw.print('i');
                 pw.print(appId - Process.FIRST_ISOLATED_UID);
-            } else {
+            } else if (appId >= Process.FIRST_APPLICATION_UID) {
                 pw.print('a');
+                pw.print(appId - Process.FIRST_APPLICATION_UID);
+            } else {
+                pw.print('s');
                 pw.print(appId);
             }
         }

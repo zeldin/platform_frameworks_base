@@ -96,7 +96,7 @@ static void com_android_internal_os_ZygoteInit_reopenStdio(JNIEnv* env,
 
     fd = jniGetFDFromFileDescriptor(env, in);
 
-    if  (env->ExceptionOccurred() != NULL) {
+    if  (env->ExceptionCheck()) {
         return;
     }
 
@@ -106,7 +106,7 @@ static void com_android_internal_os_ZygoteInit_reopenStdio(JNIEnv* env,
 
     fd = jniGetFDFromFileDescriptor(env, out);
 
-    if  (env->ExceptionOccurred() != NULL) {
+    if  (env->ExceptionCheck()) {
         return;
     }
 
@@ -116,7 +116,7 @@ static void com_android_internal_os_ZygoteInit_reopenStdio(JNIEnv* env,
 
     fd = jniGetFDFromFileDescriptor(env, errfd);
 
-    if  (env->ExceptionOccurred() != NULL) {
+    if  (env->ExceptionCheck()) {
         return;
     }
 
@@ -134,7 +134,7 @@ static void com_android_internal_os_ZygoteInit_setCloseOnExec (JNIEnv *env,
 
     fd = jniGetFDFromFileDescriptor(env, descriptor);
 
-    if  (env->ExceptionOccurred() != NULL) {
+    if  (env->ExceptionCheck()) {
         return;
     }
 
@@ -159,29 +159,6 @@ static void com_android_internal_os_ZygoteInit_setCloseOnExec (JNIEnv *env,
     }
 }
 
-static jlong com_android_internal_os_ZygoteInit_capgetPermitted (JNIEnv *env,
-    jobject clazz, jint pid)
-{
-    struct __user_cap_header_struct capheader;
-    struct __user_cap_data_struct capdata;
-    int err;
-
-    memset (&capheader, 0, sizeof(capheader));
-    memset (&capdata, 0, sizeof(capdata));
-
-    capheader.version = _LINUX_CAPABILITY_VERSION;
-    capheader.pid = pid;
-
-    err = capget (&capheader, &capdata);
-
-    if (err < 0) {
-        jniThrowIOException(env, errno);
-        return 0;
-    }
-
-    return (jlong) capdata.permitted;
-}
-
 static jint com_android_internal_os_ZygoteInit_selectReadable (
         JNIEnv *env, jobject clazz, jobjectArray fds)
 {
@@ -193,7 +170,7 @@ static jint com_android_internal_os_ZygoteInit_selectReadable (
     jsize length = env->GetArrayLength(fds);
     fd_set fdset;
 
-    if (env->ExceptionOccurred() != NULL) {
+    if (env->ExceptionCheck()) {
         return -1;
     }
 
@@ -202,14 +179,14 @@ static jint com_android_internal_os_ZygoteInit_selectReadable (
     int nfds = 0;
     for (jsize i = 0; i < length; i++) {
         jobject fdObj = env->GetObjectArrayElement(fds, i);
-        if  (env->ExceptionOccurred() != NULL) {
+        if  (env->ExceptionCheck()) {
             return -1;
         }
         if (fdObj == NULL) {
             continue;
         }
         int fd = jniGetFDFromFileDescriptor(env, fdObj);
-        if  (env->ExceptionOccurred() != NULL) {
+        if  (env->ExceptionCheck()) {
             return -1;
         }
 
@@ -232,14 +209,14 @@ static jint com_android_internal_os_ZygoteInit_selectReadable (
 
     for (jsize i = 0; i < length; i++) {
         jobject fdObj = env->GetObjectArrayElement(fds, i);
-        if  (env->ExceptionOccurred() != NULL) {
+        if  (env->ExceptionCheck()) {
             return -1;
         }
         if (fdObj == NULL) {
             continue;
         }
         int fd = jniGetFDFromFileDescriptor(env, fdObj);
-        if  (env->ExceptionOccurred() != NULL) {
+        if  (env->ExceptionCheck()) {
             return -1;
         }
         if (FD_ISSET(fd, &fdset)) {
@@ -274,8 +251,6 @@ static JNINativeMethod gMethods[] = {
             (void *) com_android_internal_os_ZygoteInit_reopenStdio},
     { "setCloseOnExec", "(Ljava/io/FileDescriptor;Z)V",
         (void *)  com_android_internal_os_ZygoteInit_setCloseOnExec},
-    { "capgetPermitted", "(I)J",
-        (void *) com_android_internal_os_ZygoteInit_capgetPermitted },
     { "selectReadable", "([Ljava/io/FileDescriptor;)I",
         (void *) com_android_internal_os_ZygoteInit_selectReadable },
     { "createFileDescriptor", "(I)Ljava/io/FileDescriptor;",

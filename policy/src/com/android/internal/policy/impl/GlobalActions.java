@@ -121,13 +121,14 @@ class GlobalActions implements DialogInterface.OnDismissListener, DialogInterfac
         filter.addAction(TelephonyIntents.ACTION_EMERGENCY_CALLBACK_MODE_CHANGED);
         context.registerReceiver(mBroadcastReceiver, filter);
 
+        ConnectivityManager cm = (ConnectivityManager)
+                context.getSystemService(Context.CONNECTIVITY_SERVICE);
+        mHasTelephony = cm.isNetworkSupported(ConnectivityManager.TYPE_MOBILE);
+
         // get notified of phone state changes
         TelephonyManager telephonyManager =
                 (TelephonyManager) context.getSystemService(Context.TELEPHONY_SERVICE);
         telephonyManager.listen(mPhoneStateListener, PhoneStateListener.LISTEN_SERVICE_STATE);
-        ConnectivityManager cm = (ConnectivityManager)
-                context.getSystemService(Context.CONNECTIVITY_SERVICE);
-        mHasTelephony = cm.isNetworkSupported(ConnectivityManager.TYPE_MOBILE);
         mContext.getContentResolver().registerContentObserver(
                 Settings.Global.getUriFor(Settings.Global.AIRPLANE_MODE_ON), true,
                 mAirplaneModeObserver);
@@ -265,7 +266,7 @@ class GlobalActions implements DialogInterface.OnDismissListener, DialogInterfac
 
         // next: bug report, if enabled
         if (Settings.Global.getInt(mContext.getContentResolver(),
-                Settings.Global.BUGREPORT_IN_POWER_MENU, 0) != 0) {
+                Settings.Global.BUGREPORT_IN_POWER_MENU, 0) != 0 && isCurrentUserOwner()) {
             mItems.add(
                 new SinglePressAction(com.android.internal.R.drawable.stat_sys_adb,
                         R.string.global_action_bug_report) {
@@ -349,16 +350,24 @@ class GlobalActions implements DialogInterface.OnDismissListener, DialogInterfac
         return dialog;
     }
 
+    private UserInfo getCurrentUser() {
+        try {
+            return ActivityManagerNative.getDefault().getCurrentUser();
+        } catch (RemoteException re) {
+            return null;
+        }
+    }
+
+    private boolean isCurrentUserOwner() {
+        UserInfo currentUser = getCurrentUser();
+        return currentUser == null || currentUser.isPrimary();
+    }
+
     private void addUsersToMenu(ArrayList<Action> items) {
         List<UserInfo> users = ((UserManager) mContext.getSystemService(Context.USER_SERVICE))
                 .getUsers();
         if (users.size() > 1) {
-            UserInfo currentUser;
-            try {
-                currentUser = ActivityManagerNative.getDefault().getCurrentUser();
-            } catch (RemoteException re) {
-                currentUser = null;
-            }
+            UserInfo currentUser = getCurrentUser();
             for (final UserInfo user : users) {
                 boolean isCurrentUser = currentUser == null
                         ? user.id == 0 : (currentUser.id == user.id);
@@ -879,6 +888,7 @@ class GlobalActions implements DialogInterface.OnDismissListener, DialogInterfac
             case MESSAGE_DISMISS:
                 if (mDialog != null) {
                     mDialog.dismiss();
+                    mDialog = null;
                 }
                 break;
             case MESSAGE_REFRESH:

@@ -19,27 +19,22 @@
  * System clock functions.
  */
 
+#include <sys/time.h>
+#include <limits.h>
+#include <fcntl.h>
+#include <errno.h>
+#include <string.h>
+
 #include "JNIHelp.h"
 #include "jni.h"
 #include "android_runtime/AndroidRuntime.h"
 
-#include "utils/SystemClock.h"
-
 #include <sys/time.h>
 #include <time.h>
 
-namespace android {
+#include <utils/SystemClock.h>
 
-/*
- * native public static void setCurrentTimeMillis(long millis)
- *
- * Set the current time.  This only works when running as root.
- */
-static jboolean android_os_SystemClock_setCurrentTimeMillis(JNIEnv* env,
-    jobject clazz, jlong millis)
-{
-    return (setCurrentTimeMillis(millis) == 0);
-}
+namespace android {
 
 /*
  * native public static long uptimeMillis();
@@ -125,8 +120,6 @@ static jlong android_os_SystemClock_elapsedRealtimeNano(JNIEnv* env,
  */
 static JNINativeMethod gMethods[] = {
     /* name, signature, funcPtr */
-    { "setCurrentTimeMillis",      "(J)Z",
-            (void*) android_os_SystemClock_setCurrentTimeMillis },
     { "uptimeMillis",      "()J",
             (void*) android_os_SystemClock_uptimeMillis },
     { "elapsedRealtime",      "()J",

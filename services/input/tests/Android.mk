@@ -16,18 +16,10 @@ shared_libraries := \
     libhardware_legacy \
     libui \
     libskia \
-    libstlport \
-    libinput
-
-static_libraries := \
-    libgtest \
-    libgtest_main
+    libinput \
+    libinputservice
 
 c_includes := \
-    bionic \
-    bionic/libstdc++/include \
-    external/gtest/include \
-    external/stlport/stlport \
     external/skia/include/core
 
 module_tags := eng tests
@@ -40,7 +32,7 @@ $(foreach file,$(test_src_files), \
     $(eval LOCAL_SRC_FILES := $(file)) \
     $(eval LOCAL_MODULE := $(notdir $(file:%.cpp=%))) \
     $(eval LOCAL_MODULE_TAGS := $(module_tags)) \
-    $(eval include $(BUILD_EXECUTABLE)) \
+    $(eval include $(BUILD_NATIVE_TEST)) \
 )
 
 # Build the manual test programs.

@@ -16,8 +16,7 @@
 
 package com.android.commands.pm;
 
-import com.android.internal.content.PackageHelper;
-
+import android.app.ActivityManager;
 import android.app.ActivityManagerNative;
 import android.content.ComponentName;
 import android.content.pm.ApplicationInfo;
@@ -39,6 +38,7 @@ import android.content.pm.VerificationParams;
 import android.content.res.AssetManager;
 import android.content.res.Resources;
 import android.net.Uri;
+import android.os.Build;
 import android.os.IUserManager;
 import android.os.RemoteException;
 import android.os.ServiceManager;
@@ -46,6 +46,7 @@ import android.os.UserHandle;
 import android.os.UserManager;
 
 import java.io.File;
+import java.io.FileDescriptor;
 import java.lang.reflect.Field;
 import java.lang.reflect.Modifier;
 import java.security.InvalidAlgorithmParameterException;
@@ -54,10 +55,11 @@ import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
 import java.util.WeakHashMap;
-
 import javax.crypto.SecretKey;
 import javax.crypto.spec.IvParameterSpec;
 import javax.crypto.spec.SecretKeySpec;
+
+import com.android.internal.content.PackageHelper;
 
 public final class Pm {
     IPackageManager mPm;
@@ -105,6 +107,11 @@ public final class Pm {
             return;
         }
 
+        if ("dump".equals(op)) {
+            runDump();
+            return;
+        }
+
         if ("install".equals(op)) {
             runInstall();
             return;
@@ -137,6 +144,16 @@ public final class Pm {
 
         if ("disable-until-used".equals(op)) {
             runSetEnabledSetting(PackageManager.COMPONENT_ENABLED_STATE_DISABLED_UNTIL_USED);
+            return;
+        }
+
+        if ("block".equals(op)) {
+            runSetBlockedSetting(true);
+            return;
+        }
+
+        if ("unblock".equals(op)) {
+            runSetBlockedSetting(false);
             return;
         }
 
@@ -672,6 +689,15 @@ public final class Pm {
         displayPackageFilePath(pkg);
     }
 
+    private void runDump() {
+        String pkg = nextArg();
+        if (pkg == null) {
+            System.err.println("Error: no package specified");
+            return;
+        }
+        ActivityManager.dumpPackageStateStatic(FileDescriptor.out, pkg);
+    }
+
     class PackageInstallObserver extends IPackageInstallObserver.Stub {
         boolean finished;
         int result;
@@ -775,6 +801,7 @@ public final class Pm {
         byte[] tag = null;
         String originatingUriString = null;
         String referrer = null;
+        String abi = null;
 
         while ((opt=nextOption()) != null) {
             if (opt.equals("-l")) {
@@ -845,8 +872,30 @@ public final class Pm {
                     System.err.println("Error: must supply argument for --referrer");
                     return;
                 }
+            } else if (opt.equals("--abi")) {
+                abi = nextOptionData();
+                if (abi == null) {
+                    System.err.println("Error: must supply argument for --abi");
+                    return;
+                }
             } else {
                 System.err.println("Error: Unknown option: " + opt);
+                return;
+            }
+        }
+
+        if (abi != null) {
+            final String[] supportedAbis = Build.SUPPORTED_ABIS;
+            boolean matched = false;
+            for (String supportedAbi : supportedAbis) {
+                if (supportedAbi.equals(abi)) {
+                    matched = true;
+                    break;
+                }
+            }
+
+            if (!matched) {
+                System.err.println("Error: abi " + abi + " not supported on this device.");
                 return;
             }
         }
@@ -928,8 +977,9 @@ public final class Pm {
             VerificationParams verificationParams = new VerificationParams(verificationURI,
                     originatingURI, referrerURI, VerificationParams.NO_UID, null);
 
-            mPm.installPackageWithVerificationAndEncryption(apkURI, obs, installFlags,
-                    installerPackageName, verificationParams, encryptionParams);
+            mPm.installPackageWithVerificationEncryptionAndAbiOverride(apkURI, obs,
+                    installFlags, installerPackageName, verificationParams,
+                    encryptionParams, abi);
 
             synchronized (obs) {
                 while (!obs.finished) {
@@ -1240,6 +1290,36 @@ public final class Pm {
         }
     }
 
+    private void runSetBlockedSetting(boolean state) {
+        int userId = 0;
+        String option = nextOption();
+        if (option != null && option.equals("--user")) {
+            String optionData = nextOptionData();
+            if (optionData == null || !isNumber(optionData)) {
+                System.err.println("Error: no USER_ID specified");
+                showUsage();
+                return;
+            } else {
+                userId = Integer.parseInt(optionData);
+            }
+        }
+
+        String pkg = nextArg();
+        if (pkg == null) {
+            System.err.println("Error: no package or component specified");
+            showUsage();
+            return;
+        }
+        try {
+            mPm.setApplicationBlockedSettingAsUser(pkg, state, userId);
+            System.err.println("Package " + pkg + " new blocked state: "
+                    + mPm.getApplicationBlockedSettingAsUser(pkg, userId));
+        } catch (RemoteException e) {
+            System.err.println(e.toString());
+            System.err.println(PM_NOT_RUNNING_ERR);
+        }
+    }
+
     private void runGrantRevokePermission(boolean grant) {
         String pkg = nextArg();
         if (pkg == null) {
@@ -1456,6 +1536,7 @@ public final class Pm {
         System.err.println("       pm list libraries");
         System.err.println("       pm list users");
         System.err.println("       pm path PACKAGE");
+        System.err.println("       pm dump PACKAGE");
         System.err.println("       pm install [-l] [-r] [-t] [-i INSTALLER_PACKAGE_NAME] [-s] [-f]");
         System.err.println("                  [--algo <algorithm name> --key <key-in-hex> --iv <IV-in-hex>]");
         System.err.println("                  [--originating-uri <URI>] [--referrer <URI>] PATH");
@@ -1465,6 +1546,8 @@ public final class Pm {
         System.err.println("       pm disable [--user USER_ID] PACKAGE_OR_COMPONENT");
         System.err.println("       pm disable-user [--user USER_ID] PACKAGE_OR_COMPONENT");
         System.err.println("       pm disable-until-used [--user USER_ID] PACKAGE_OR_COMPONENT");
+        System.err.println("       pm block [--user USER_ID] PACKAGE_OR_COMPONENT");
+        System.err.println("       pm unblock [--user USER_ID] PACKAGE_OR_COMPONENT");
         System.err.println("       pm grant PACKAGE PERMISSION");
         System.err.println("       pm revoke PACKAGE PERMISSION");
         System.err.println("       pm set-install-location [0/auto] [1/internal] [2/external]");
@@ -1505,6 +1588,8 @@ public final class Pm {
         System.err.println("pm list users: prints all users on the system.");
         System.err.println("");
         System.err.println("pm path: print the path to the .apk of the given PACKAGE.");
+        System.err.println("");
+        System.err.println("pm dump: print system state associated w ith the given PACKAGE.");
         System.err.println("");
         System.err.println("pm install: installs a package to the system.  Options:");
         System.err.println("    -l: install the package with FORWARD_LOCK.");

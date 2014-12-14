@@ -33,6 +33,8 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.nio.Buffer;
 import java.util.Arrays;
+import java.util.EnumSet;
+import java.util.Set;
 
 import javax.imageio.ImageIO;
 
@@ -50,6 +52,10 @@ import javax.imageio.ImageIO;
  *
  */
 public final class Bitmap_Delegate {
+
+    public enum BitmapCreateFlags {
+        PREMULTIPLIED, MUTABLE
+    }
 
     // ---- delegate manager ----
     private static final DelegateManager<Bitmap_Delegate> sManager =
@@ -77,7 +83,7 @@ public final class Bitmap_Delegate {
     /**
      * Returns the native delegate associated to a given an int referencing a {@link Bitmap} object.
      */
-    public static Bitmap_Delegate getDelegate(int native_bitmap) {
+    public static Bitmap_Delegate getDelegate(long native_bitmap) {
         return sManager.getDelegate(native_bitmap);
     }
 
@@ -93,10 +99,25 @@ public final class Bitmap_Delegate {
      */
     public static Bitmap createBitmap(File input, boolean isMutable, Density density)
             throws IOException {
+        return createBitmap(input, getPremultipliedBitmapCreateFlags(isMutable), density);
+    }
+
+    /**
+     * Creates and returns a {@link Bitmap} initialized with the given file content.
+     *
+     * @param input the file from which to read the bitmap content
+     * @param density the density associated with the bitmap
+     *
+     * @see Bitmap#isPremultiplied()
+     * @see Bitmap#isMutable()
+     * @see Bitmap#getDensity()
+     */
+    public static Bitmap createBitmap(File input, Set<BitmapCreateFlags> createFlags,
+            Density density) throws IOException {
         // create a delegate with the content of the file.
         Bitmap_Delegate delegate = new Bitmap_Delegate(ImageIO.read(input), Config.ARGB_8888);
 
-        return createBitmap(delegate, isMutable, density.getDpiValue());
+        return createBitmap(delegate, createFlags, density.getDpiValue());
     }
 
     /**
@@ -111,10 +132,26 @@ public final class Bitmap_Delegate {
      */
     public static Bitmap createBitmap(InputStream input, boolean isMutable, Density density)
             throws IOException {
+        return createBitmap(input, getPremultipliedBitmapCreateFlags(isMutable), density);
+    }
+
+    /**
+     * Creates and returns a {@link Bitmap} initialized with the given stream content.
+     *
+     * @param input the stream from which to read the bitmap content
+     * @param createFlags
+     * @param density the density associated with the bitmap
+     *
+     * @see Bitmap#isPremultiplied()
+     * @see Bitmap#isMutable()
+     * @see Bitmap#getDensity()
+     */
+    public static Bitmap createBitmap(InputStream input, Set<BitmapCreateFlags> createFlags,
+            Density density) throws IOException {
         // create a delegate with the content of the stream.
         Bitmap_Delegate delegate = new Bitmap_Delegate(ImageIO.read(input), Config.ARGB_8888);
 
-        return createBitmap(delegate, isMutable, density.getDpiValue());
+        return createBitmap(delegate, createFlags, density.getDpiValue());
     }
 
     /**
@@ -129,10 +166,26 @@ public final class Bitmap_Delegate {
      */
     public static Bitmap createBitmap(BufferedImage image, boolean isMutable,
             Density density) throws IOException {
+        return createBitmap(image, getPremultipliedBitmapCreateFlags(isMutable), density);
+    }
+
+    /**
+     * Creates and returns a {@link Bitmap} initialized with the given {@link BufferedImage}
+     *
+     * @param image the bitmap content
+     * @param createFlags
+     * @param density the density associated with the bitmap
+     *
+     * @see Bitmap#isPremultiplied()
+     * @see Bitmap#isMutable()
+     * @see Bitmap#getDensity()
+     */
+    public static Bitmap createBitmap(BufferedImage image, Set<BitmapCreateFlags> createFlags,
+            Density density) throws IOException {
         // create a delegate with the given image.
         Bitmap_Delegate delegate = new Bitmap_Delegate(image, Config.ARGB_8888);
 
-        return createBitmap(delegate, isMutable, density.getDpiValue());
+        return createBitmap(delegate, createFlags, density.getDpiValue());
     }
 
     /**
@@ -203,7 +256,7 @@ public final class Bitmap_Delegate {
 
     @LayoutlibDelegate
     /*package*/ static Bitmap nativeCreate(int[] colors, int offset, int stride, int width,
-            int height, int nativeConfig, boolean mutable) {
+            int height, int nativeConfig, boolean isMutable) {
         int imageType = getBufferedImageType(nativeConfig);
 
         // create the image
@@ -216,11 +269,12 @@ public final class Bitmap_Delegate {
         // create a delegate with the content of the stream.
         Bitmap_Delegate delegate = new Bitmap_Delegate(image, Config.nativeToConfig(nativeConfig));
 
-        return createBitmap(delegate, mutable, Bitmap.getDefaultDensity());
+        return createBitmap(delegate, getPremultipliedBitmapCreateFlags(isMutable),
+                            Bitmap.getDefaultDensity());
     }
 
     @LayoutlibDelegate
-    /*package*/ static Bitmap nativeCopy(int srcBitmap, int nativeConfig, boolean isMutable) {
+    /*package*/ static Bitmap nativeCopy(long srcBitmap, int nativeConfig, boolean isMutable) {
         Bitmap_Delegate srcBmpDelegate = sManager.getDelegate(srcBitmap);
         if (srcBmpDelegate == null) {
             return null;
@@ -244,21 +298,30 @@ public final class Bitmap_Delegate {
         // create a delegate with the content of the stream.
         Bitmap_Delegate delegate = new Bitmap_Delegate(image, Config.nativeToConfig(nativeConfig));
 
-        return createBitmap(delegate, isMutable, Bitmap.getDefaultDensity());
+        return createBitmap(delegate, getPremultipliedBitmapCreateFlags(isMutable),
+                Bitmap.getDefaultDensity());
     }
 
     @LayoutlibDelegate
-    /*package*/ static void nativeDestructor(int nativeBitmap) {
+    /*package*/ static void nativeDestructor(long nativeBitmap) {
         sManager.removeJavaReferenceFor(nativeBitmap);
     }
 
     @LayoutlibDelegate
-    /*package*/ static void nativeRecycle(int nativeBitmap) {
+    /*package*/ static boolean nativeRecycle(long nativeBitmap) {
         sManager.removeJavaReferenceFor(nativeBitmap);
+        return true;
     }
 
     @LayoutlibDelegate
-    /*package*/ static boolean nativeCompress(int nativeBitmap, int format, int quality,
+    /*package*/ static void nativeReconfigure(long nativeBitmap, int width, int height,
+            int config, int allocSize) {
+        Bridge.getLog().error(LayoutLog.TAG_UNSUPPORTED,
+                "Bitmap.reconfigure() is not supported", null /*data*/);
+    }
+
+    @LayoutlibDelegate
+    /*package*/ static boolean nativeCompress(long nativeBitmap, int format, int quality,
             OutputStream stream, byte[] tempStorage) {
         Bridge.getLog().error(LayoutLog.TAG_UNSUPPORTED,
                 "Bitmap.compress() is not supported", null /*data*/);
@@ -266,7 +329,7 @@ public final class Bitmap_Delegate {
     }
 
     @LayoutlibDelegate
-    /*package*/ static void nativeErase(int nativeBitmap, int color) {
+    /*package*/ static void nativeErase(long nativeBitmap, int color) {
         // get the delegate from the native int.
         Bitmap_Delegate delegate = sManager.getDelegate(nativeBitmap);
         if (delegate == null) {
@@ -286,7 +349,7 @@ public final class Bitmap_Delegate {
     }
 
     @LayoutlibDelegate
-    /*package*/ static int nativeWidth(int nativeBitmap) {
+    /*package*/ static int nativeRowBytes(long nativeBitmap) {
         // get the delegate from the native int.
         Bitmap_Delegate delegate = sManager.getDelegate(nativeBitmap);
         if (delegate == null) {
@@ -297,29 +360,7 @@ public final class Bitmap_Delegate {
     }
 
     @LayoutlibDelegate
-    /*package*/ static int nativeHeight(int nativeBitmap) {
-        // get the delegate from the native int.
-        Bitmap_Delegate delegate = sManager.getDelegate(nativeBitmap);
-        if (delegate == null) {
-            return 0;
-        }
-
-        return delegate.mImage.getHeight();
-    }
-
-    @LayoutlibDelegate
-    /*package*/ static int nativeRowBytes(int nativeBitmap) {
-        // get the delegate from the native int.
-        Bitmap_Delegate delegate = sManager.getDelegate(nativeBitmap);
-        if (delegate == null) {
-            return 0;
-        }
-
-        return delegate.mImage.getWidth();
-    }
-
-    @LayoutlibDelegate
-    /*package*/ static int nativeConfig(int nativeBitmap) {
+    /*package*/ static int nativeConfig(long nativeBitmap) {
         // get the delegate from the native int.
         Bitmap_Delegate delegate = sManager.getDelegate(nativeBitmap);
         if (delegate == null) {
@@ -330,7 +371,7 @@ public final class Bitmap_Delegate {
     }
 
     @LayoutlibDelegate
-    /*package*/ static boolean nativeHasAlpha(int nativeBitmap) {
+    /*package*/ static boolean nativeHasAlpha(long nativeBitmap) {
         // get the delegate from the native int.
         Bitmap_Delegate delegate = sManager.getDelegate(nativeBitmap);
         if (delegate == null) {
@@ -341,7 +382,7 @@ public final class Bitmap_Delegate {
     }
 
     @LayoutlibDelegate
-    /*package*/ static boolean nativeHasMipMap(int nativeBitmap) {
+    /*package*/ static boolean nativeHasMipMap(long nativeBitmap) {
         // get the delegate from the native int.
         Bitmap_Delegate delegate = sManager.getDelegate(nativeBitmap);
         if (delegate == null) {
@@ -352,19 +393,21 @@ public final class Bitmap_Delegate {
     }
 
     @LayoutlibDelegate
-    /*package*/ static int nativeGetPixel(int nativeBitmap, int x, int y) {
+    /*package*/ static int nativeGetPixel(long nativeBitmap, int x, int y,
+            boolean isPremultiplied) {
         // get the delegate from the native int.
         Bitmap_Delegate delegate = sManager.getDelegate(nativeBitmap);
         if (delegate == null) {
             return 0;
         }
 
+        // TODO: Support isPremultiplied.
         return delegate.mImage.getRGB(x, y);
     }
 
     @LayoutlibDelegate
-    /*package*/ static void nativeGetPixels(int nativeBitmap, int[] pixels, int offset,
-            int stride, int x, int y, int width, int height) {
+    /*package*/ static void nativeGetPixels(long nativeBitmap, int[] pixels, int offset,
+            int stride, int x, int y, int width, int height, boolean isPremultiplied) {
         Bitmap_Delegate delegate = sManager.getDelegate(nativeBitmap);
         if (delegate == null) {
             return;
@@ -375,7 +418,8 @@ public final class Bitmap_Delegate {
 
 
     @LayoutlibDelegate
-    /*package*/ static void nativeSetPixel(int nativeBitmap, int x, int y, int color) {
+    /*package*/ static void nativeSetPixel(long nativeBitmap, int x, int y, int color,
+            boolean isPremultiplied) {
         Bitmap_Delegate delegate = sManager.getDelegate(nativeBitmap);
         if (delegate == null) {
             return;
@@ -385,8 +429,8 @@ public final class Bitmap_Delegate {
     }
 
     @LayoutlibDelegate
-    /*package*/ static void nativeSetPixels(int nativeBitmap, int[] colors, int offset,
-            int stride, int x, int y, int width, int height) {
+    /*package*/ static void nativeSetPixels(long nativeBitmap, int[] colors, int offset,
+            int stride, int x, int y, int width, int height, boolean isPremultiplied) {
         Bitmap_Delegate delegate = sManager.getDelegate(nativeBitmap);
         if (delegate == null) {
             return;
@@ -396,21 +440,21 @@ public final class Bitmap_Delegate {
     }
 
     @LayoutlibDelegate
-    /*package*/ static void nativeCopyPixelsToBuffer(int nativeBitmap, Buffer dst) {
+    /*package*/ static void nativeCopyPixelsToBuffer(long nativeBitmap, Buffer dst) {
         // FIXME implement native delegate
         Bridge.getLog().fidelityWarning(LayoutLog.TAG_UNSUPPORTED,
                 "Bitmap.copyPixelsToBuffer is not supported.", null, null /*data*/);
     }
 
     @LayoutlibDelegate
-    /*package*/ static void nativeCopyPixelsFromBuffer(int nb, Buffer src) {
+    /*package*/ static void nativeCopyPixelsFromBuffer(long nb, Buffer src) {
         // FIXME implement native delegate
         Bridge.getLog().fidelityWarning(LayoutLog.TAG_UNSUPPORTED,
                 "Bitmap.copyPixelsFromBuffer is not supported.", null, null /*data*/);
     }
 
     @LayoutlibDelegate
-    /*package*/ static int nativeGenerationId(int nativeBitmap) {
+    /*package*/ static int nativeGenerationId(long nativeBitmap) {
         Bitmap_Delegate delegate = sManager.getDelegate(nativeBitmap);
         if (delegate == null) {
             return 0;
@@ -430,7 +474,7 @@ public final class Bitmap_Delegate {
     }
 
     @LayoutlibDelegate
-    /*package*/ static boolean nativeWriteToParcel(int nativeBitmap, boolean isMutable,
+    /*package*/ static boolean nativeWriteToParcel(long nativeBitmap, boolean isMutable,
             int density, Parcel p) {
         // This is only called when sending a bitmap through aidl, so really this should not
         // be called.
@@ -441,7 +485,7 @@ public final class Bitmap_Delegate {
     }
 
     @LayoutlibDelegate
-    /*package*/ static Bitmap nativeExtractAlpha(int nativeBitmap, int nativePaint,
+    /*package*/ static Bitmap nativeExtractAlpha(long nativeBitmap, long nativePaint,
             int[] offsetXY) {
         Bitmap_Delegate bitmap = sManager.getDelegate(nativeBitmap);
         if (bitmap == null) {
@@ -464,17 +508,17 @@ public final class Bitmap_Delegate {
         Bitmap_Delegate delegate = new Bitmap_Delegate(image, Config.ALPHA_8);
 
         // the density doesn't matter, it's set by the Java method.
-        return createBitmap(delegate, false /*isMutable*/,
+        return createBitmap(delegate, EnumSet.of(BitmapCreateFlags.MUTABLE),
                 Density.DEFAULT_DENSITY /*density*/);
     }
 
     @LayoutlibDelegate
-    /*package*/ static void nativePrepareToDraw(int nativeBitmap) {
+    /*package*/ static void nativePrepareToDraw(long nativeBitmap) {
         // nothing to be done here.
     }
 
     @LayoutlibDelegate
-    /*package*/ static void nativeSetHasAlpha(int nativeBitmap, boolean hasAlpha) {
+    /*package*/ static void nativeSetHasAlpha(long nativeBitmap, boolean hasAlpha) {
         // get the delegate from the native int.
         Bitmap_Delegate delegate = sManager.getDelegate(nativeBitmap);
         if (delegate == null) {
@@ -485,7 +529,7 @@ public final class Bitmap_Delegate {
     }
 
     @LayoutlibDelegate
-    /*package*/ static void nativeSetHasMipMap(int nativeBitmap, boolean hasMipMap) {
+    /*package*/ static void nativeSetHasMipMap(long nativeBitmap, boolean hasMipMap) {
         // get the delegate from the native int.
         Bitmap_Delegate delegate = sManager.getDelegate(nativeBitmap);
         if (delegate == null) {
@@ -496,7 +540,7 @@ public final class Bitmap_Delegate {
     }
 
     @LayoutlibDelegate
-    /*package*/ static boolean nativeSameAs(int nb0, int nb1) {
+    /*package*/ static boolean nativeSameAs(long nb0, long nb1) {
         Bitmap_Delegate delegate1 = sManager.getDelegate(nb0);
         if (delegate1 == null) {
             return false;
@@ -546,13 +590,27 @@ public final class Bitmap_Delegate {
         mConfig = config;
     }
 
-    private static Bitmap createBitmap(Bitmap_Delegate delegate, boolean isMutable, int density) {
+    private static Bitmap createBitmap(Bitmap_Delegate delegate,
+            Set<BitmapCreateFlags> createFlags, int density) {
         // get its native_int
-        int nativeInt = sManager.addNewDelegate(delegate);
+        long nativeInt = sManager.addNewDelegate(delegate);
+
+        int width = delegate.mImage.getWidth();
+        int height = delegate.mImage.getHeight();
+        boolean isMutable = createFlags.contains(BitmapCreateFlags.MUTABLE);
+        boolean isPremultiplied = createFlags.contains(BitmapCreateFlags.PREMULTIPLIED);
 
         // and create/return a new Bitmap with it
-        return new Bitmap(nativeInt, null /* buffer */, isMutable, null /*ninePatchChunk*/,
-                density);
+        return new Bitmap(nativeInt, null /* buffer */, width, height, density, isMutable,
+                          isPremultiplied, null /*ninePatchChunk*/, null /* layoutBounds */);
+    }
+
+    private static Set<BitmapCreateFlags> getPremultipliedBitmapCreateFlags(boolean isMutable) {
+        Set<BitmapCreateFlags> createFlags = EnumSet.of(BitmapCreateFlags.PREMULTIPLIED);
+        if (isMutable) {
+            createFlags.add(BitmapCreateFlags.MUTABLE);
+        }
+        return createFlags;
     }
 
     /**

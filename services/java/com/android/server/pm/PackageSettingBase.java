@@ -53,6 +53,7 @@ class PackageSettingBase extends GrantedPermissions {
     File resourcePath;
     String resourcePathString;
     String nativeLibraryPathString;
+    String cpuAbiString;
     long timeStamp;
     long firstInstallTime;
     long lastUpdateTime;
@@ -64,6 +65,8 @@ class PackageSettingBase extends GrantedPermissions {
 
     boolean permissionsFixed;
     boolean haveGids;
+
+    PackageKeySetData keySetData = new PackageKeySetData();
 
     private static final PackageUserState DEFAULT_USER_STATE = new PackageUserState();
 
@@ -78,11 +81,11 @@ class PackageSettingBase extends GrantedPermissions {
     /* package name of the app that installed this package */
     String installerPackageName;
     PackageSettingBase(String name, String realName, File codePath, File resourcePath,
-            String nativeLibraryPathString, int pVersionCode, int pkgFlags) {
+            String nativeLibraryPathString, String cpuAbiString, int pVersionCode, int pkgFlags) {
         super(pkgFlags);
         this.name = name;
         this.realName = realName;
-        init(codePath, resourcePath, nativeLibraryPathString, pVersionCode);
+        init(codePath, resourcePath, nativeLibraryPathString, cpuAbiString, pVersionCode);
     }
 
     /**
@@ -99,6 +102,7 @@ class PackageSettingBase extends GrantedPermissions {
         resourcePath = base.resourcePath;
         resourcePathString = base.resourcePathString;
         nativeLibraryPathString = base.nativeLibraryPathString;
+        cpuAbiString = base.cpuAbiString;
         timeStamp = base.timeStamp;
         firstInstallTime = base.firstInstallTime;
         lastUpdateTime = base.lastUpdateTime;
@@ -120,15 +124,19 @@ class PackageSettingBase extends GrantedPermissions {
         origPackage = base.origPackage;
 
         installerPackageName = base.installerPackageName;
+
+        keySetData = new PackageKeySetData(base.keySetData);
+
     }
 
     void init(File codePath, File resourcePath, String nativeLibraryPathString,
-            int pVersionCode) {
+            String requiredCpuAbiString, int pVersionCode) {
         this.codePath = codePath;
         this.codePathString = codePath.toString();
         this.resourcePath = resourcePath;
         this.resourcePathString = resourcePath.toString();
         this.nativeLibraryPathString = nativeLibraryPathString;
+        this.cpuAbiString = requiredCpuAbiString;
         this.versionCode = pVersionCode;
     }
 
@@ -159,6 +167,7 @@ class PackageSettingBase extends GrantedPermissions {
         grantedPermissions = base.grantedPermissions;
         gids = base.gids;
 
+        cpuAbiString = base.cpuAbiString;
         timeStamp = base.timeStamp;
         firstInstallTime = base.firstInstallTime;
         lastUpdateTime = base.lastUpdateTime;
@@ -170,6 +179,7 @@ class PackageSettingBase extends GrantedPermissions {
             userState.put(base.userState.keyAt(i), base.userState.valueAt(i));
         }
         installStatus = base.installStatus;
+        keySetData = base.keySetData;
     }
 
     private PackageUserState modifyUserState(int userId) {
@@ -254,14 +264,24 @@ class PackageSettingBase extends GrantedPermissions {
         modifyUserState(userId).notLaunched = stop;
     }
 
+    boolean getBlocked(int userId) {
+        return readUserState(userId).blocked;
+    }
+
+    void setBlocked(boolean blocked, int userId) {
+        modifyUserState(userId).blocked = blocked;
+    }
+
     void setUserState(int userId, int enabled, boolean installed, boolean stopped,
-            boolean notLaunched, String lastDisableAppCaller, HashSet<String> enabledComponents,
+            boolean notLaunched, boolean blocked,
+            String lastDisableAppCaller, HashSet<String> enabledComponents,
             HashSet<String> disabledComponents) {
         PackageUserState state = modifyUserState(userId);
         state.enabled = enabled;
         state.installed = installed;
         state.stopped = stopped;
         state.notLaunched = notLaunched;
+        state.blocked = blocked;
         state.lastDisableAppCaller = lastDisableAppCaller;
         state.enabledComponents = enabledComponents;
         state.disabledComponents = disabledComponents;

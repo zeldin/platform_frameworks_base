@@ -19,6 +19,7 @@ package android.graphics.drawable;
 import android.content.res.Resources;
 import android.content.res.TypedArray;
 import android.graphics.Canvas;
+import android.graphics.Color;
 import android.graphics.ColorFilter;
 import android.graphics.DashPathEffect;
 import android.graphics.LinearGradient;
@@ -405,9 +406,9 @@ public class GradientDrawable extends Drawable {
     /**
      * <p>Sets the colors used to draw the gradient. Each color is specified as an
      * ARGB integer and the array must contain at least 2 colors.</p>
-     * <p><strong>Note</strong>: changing orientation will affect all instances
+     * <p><strong>Note</strong>: changing colors will affect all instances
      * of a drawable loaded from a resource. It is recommended to invoke
-     * {@link #mutate()} before changing the orientation.</p>
+     * {@link #mutate()} before changing the colors.</p>
      *
      * @param colors 2 or more ARGB colors
      *
@@ -609,7 +610,7 @@ public class GradientDrawable extends Drawable {
     }
 
     /**
-     * <p>Changes this drawbale to use a single color instead of a gradient.</p>
+     * <p>Changes this drawable to use a single color instead of a gradient.</p>
      * <p><strong>Note</strong>: changing color will affect all instances
      * of a drawable loaded from a resource. It is recommended to invoke
      * {@link #mutate()} before changing the color.</p>
@@ -636,6 +637,11 @@ public class GradientDrawable extends Drawable {
             mAlpha = alpha;
             invalidateSelf();
         }
+    }
+
+    @Override
+    public int getAlpha() {
+        return mAlpha;
     }
 
     @Override
@@ -742,9 +748,6 @@ public class GradientDrawable extends Drawable {
 
                     mFillPaint.setShader(new LinearGradient(x0, y0, x1, y1,
                             colors, st.mPositions, Shader.TileMode.CLAMP));
-                    if (!mGradientState.mHasSolidColor) {
-                        mFillPaint.setColor(mAlpha << 24);
-                    }
                 } else if (st.mGradient == RADIAL_GRADIENT) {
                     x0 = r.left + (r.right - r.left) * st.mCenterX;
                     y0 = r.top + (r.bottom - r.top) * st.mCenterY;
@@ -754,9 +757,6 @@ public class GradientDrawable extends Drawable {
                     mFillPaint.setShader(new RadialGradient(x0, y0,
                             level * st.mGradientRadius, colors, null,
                             Shader.TileMode.CLAMP));
-                    if (!mGradientState.mHasSolidColor) {
-                        mFillPaint.setColor(mAlpha << 24);
-                    }
                 } else if (st.mGradient == SWEEP_GRADIENT) {
                     x0 = r.left + (r.right - r.left) * st.mCenterX;
                     y0 = r.top + (r.bottom - r.top) * st.mCenterY;
@@ -787,9 +787,12 @@ public class GradientDrawable extends Drawable {
 
                     }
                     mFillPaint.setShader(new SweepGradient(x0, y0, tempColors, tempPositions));
-                    if (!mGradientState.mHasSolidColor) {
-                        mFillPaint.setColor(mAlpha << 24);
-                    }
+                }
+
+                // If we don't have a solid color, the alpha channel must be
+                // maxed out so that alpha modulation works correctly.
+                if (!st.mHasSolidColor) {
+                    mFillPaint.setColor(Color.BLACK);
                 }
             }
         }
@@ -1276,6 +1279,9 @@ public class GradientDrawable extends Drawable {
             // the app is stroking the shape, set the color to the default
             // value of state.mSolidColor
             mFillPaint.setColor(0);
+        } else {
+            // Otherwise, make sure the fill alpha is maxed out.
+            mFillPaint.setColor(Color.BLACK);
         }
         mPadding = state.mPadding;
         if (state.mStrokeWidth >= 0) {

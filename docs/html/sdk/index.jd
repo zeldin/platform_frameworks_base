@@ -4,44 +4,45 @@ page.template=sdk
 header.hide=1
 page.metaDescription=Download the official Android SDK to develop apps for Android-powered devices.
 
+sdk.version=22.6.2
 
-sdk.linux32_bundle_download=adt-bundle-linux-x86-20130522.zip
-sdk.linux32_bundle_bytes=439988972
-sdk.linux32_bundle_checksum=1fdd8d7537ab9217d61d32ab912f0243
+sdk.linux32_bundle_download=adt-bundle-linux-x86-20140321.zip
+sdk.linux32_bundle_bytes=527971926
+sdk.linux32_bundle_checksum=943ae4d28fe7c79108c8bf2aafd5e6d2
 
-sdk.linux64_bundle_download=adt-bundle-linux-x86_64-20130522.zip
-sdk.linux64_bundle_bytes=440275051
-sdk.linux64_bundle_checksum=e38751ff372a8d6208fcef5659133e98
+sdk.linux64_bundle_download=adt-bundle-linux-x86_64-20140321.zip
+sdk.linux64_bundle_bytes=528187678
+sdk.linux64_bundle_checksum=f2a2153b5c7dbaeb86b550bf4f770c36
 
-sdk.mac64_bundle_download=adt-bundle-mac-x86_64-20130522.zip
-sdk.mac64_bundle_bytes=409047751
-sdk.mac64_bundle_checksum=3f4d05206d66e402e87b27a6b3dcf0f9
+sdk.mac64_bundle_download=adt-bundle-mac-x86_64-20140321.zip
+sdk.mac64_bundle_bytes=501955296
+sdk.mac64_bundle_checksum=4a08649cea9b098cdf7349f452294014
 
-sdk.win32_bundle_download=adt-bundle-windows-x86-20130522.zip
-sdk.win32_bundle_bytes=446736316
-sdk.win32_bundle_checksum=53345fa4121fa58cc048f66c3af3bae9
+sdk.win32_bundle_download=adt-bundle-windows-x86-20140321.zip
+sdk.win32_bundle_bytes=535085536
+sdk.win32_bundle_checksum=b61495a6bf591cc374c31bce4fc46ec0
 
-sdk.win64_bundle_download=adt-bundle-windows-x86_64-20130522.zip
-sdk.win64_bundle_bytes=446864400
-sdk.win64_bundle_checksum=b28817f62e7f54e3c683841b61b65564
+sdk.win64_bundle_download=adt-bundle-windows-x86_64-20140321.zip
+sdk.win64_bundle_bytes=535287324
+sdk.win64_bundle_checksum=a6f4699bbdc5a29b371ed60610535651
 
 
 
-sdk.linux_download=android-sdk_r22.0.1-linux.tgz
-sdk.linux_bytes=105617062
-sdk.linux_checksum=56ed27d456b4f0e0d3090b24f9b06757
+sdk.linux_download=android-sdk_r22.6.2-linux.tgz
+sdk.linux_bytes=101050024
+sdk.linux_checksum=ff1541418a44d894bedc5cef10622220
 
-sdk.mac_download=android-sdk_r22.0.1-macosx.zip
-sdk.mac_bytes=77206237
-sdk.mac_checksum=5c20497d7f7b9d28ee30e57cbf769c8c
+sdk.mac_download=android-sdk_r22.6.2-macosx.zip
+sdk.mac_bytes=74639394
+sdk.mac_checksum=2a319c862dd1dcf450bfe2a6b3d9c608
 
-sdk.win_download=android-sdk_r22.0.1-windows.zip
-sdk.win_bytes=113483496
-sdk.win_checksum=cb7f7703450afa5914fb4b8b8332a9f3
+sdk.win_download=android-sdk_r22.6.2-windows.zip
+sdk.win_bytes=108917505
+sdk.win_checksum=6e5bfdb7b9c1d231ed6ec78b31551cbf
 
-sdk.win_installer=installer_r22.0.1-windows.exe
-sdk.win_installer_bytes=93479015
-sdk.win_installer_checksum=81621d3b164f81f91e066011b325f88f
+sdk.win_installer=installer_r22.6.2-windows.exe
+sdk.win_installer_bytes=87383126
+sdk.win_installer_checksum=2a68b8b22ecd0aba779b1581a914b395
 
 
 
@@ -363,8 +364,8 @@ the ADT plugin to it.</p>
 <div class="col-6 reqs" style="margin:0 0 15px 20px;display:none;">
 <h5>Eclipse IDE</h5>
     <ul>
-      <li><a href="http://eclipse.org/mobile/">Eclipse</a> 3.6.2 (Helios) or greater
-<p class="note"><strong>Note:</strong> Eclipse 3.5 (Galileo) is no longer
+      <li><a href="http://eclipse.org/mobile/">Eclipse</a> 3.7.2 (Indigo) or greater
+<p class="note"><strong>Note:</strong> Eclipse 3.6 (Helios) is no longer
 supported with the latest version of ADT.</p></li>
       <li>Eclipse <a href="http://www.eclipse.org/jdt">JDT</a> plugin (included
 in most Eclipse IDE packages) </li>

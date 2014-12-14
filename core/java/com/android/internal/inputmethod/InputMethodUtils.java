@@ -57,6 +57,45 @@ public class InputMethodUtils {
         // This utility class is not publicly instantiable.
     }
 
+    // ----------------------------------------------------------------------
+    // Utilities for debug
+    public static String getStackTrace() {
+        final StringBuilder sb = new StringBuilder();
+        try {
+            throw new RuntimeException();
+        } catch (RuntimeException e) {
+            final StackTraceElement[] frames = e.getStackTrace();
+            // Start at 1 because the first frame is here and we don't care about it
+            for (int j = 1; j < frames.length; ++j) {
+                sb.append(frames[j].toString() + "\n");
+            }
+        }
+        return sb.toString();
+    }
+
+    public static String getApiCallStack() {
+        String apiCallStack = "";
+        try {
+            throw new RuntimeException();
+        } catch (RuntimeException e) {
+            final StackTraceElement[] frames = e.getStackTrace();
+            for (int j = 1; j < frames.length; ++j) {
+                final String tempCallStack = frames[j].toString();
+                if (TextUtils.isEmpty(apiCallStack)) {
+                    // Overwrite apiCallStack if it's empty
+                    apiCallStack = tempCallStack;
+                } else if (tempCallStack.indexOf("Transact(") < 0) {
+                    // Overwrite apiCallStack if it's not a binder call
+                    apiCallStack = tempCallStack;
+                } else {
+                    break;
+                }
+            }
+        }
+        return apiCallStack;
+    }
+    // ----------------------------------------------------------------------
+
     public static boolean isSystemIme(InputMethodInfo inputMethod) {
         return (inputMethod.getServiceInfo().applicationInfo.flags
                 & ApplicationInfo.FLAG_SYSTEM) != 0;
@@ -142,7 +181,7 @@ public class InputMethodUtils {
                 || isSystemImeThatHasEnglishKeyboardSubtype(imi);
     }
 
-    private static boolean containsSubtypeOf(InputMethodInfo imi, String language, String mode) {
+    public static boolean containsSubtypeOf(InputMethodInfo imi, String language, String mode) {
         final int N = imi.getSubtypeCount();
         for (int i = 0; i < N; ++i) {
             if (!imi.getSubtypeAt(i).getLocale().startsWith(language)) {
@@ -223,6 +262,7 @@ public class InputMethodUtils {
         final List<InputMethodSubtype> subtypes = InputMethodUtils.getSubtypes(imi);
         final String systemLocale = res.getConfiguration().locale.toString();
         if (TextUtils.isEmpty(systemLocale)) return new ArrayList<InputMethodSubtype>();
+        final String systemLanguage = res.getConfiguration().locale.getLanguage();
         final HashMap<String, InputMethodSubtype> applicableModeAndSubtypesMap =
                 new HashMap<String, InputMethodSubtype>();
         final int N = subtypes.size();
@@ -243,15 +283,22 @@ public class InputMethodUtils {
             final InputMethodSubtype subtype = subtypes.get(i);
             final String locale = subtype.getLocale();
             final String mode = subtype.getMode();
+            final String language = getLanguageFromLocaleString(locale);
             // When system locale starts with subtype's locale, that subtype will be applicable
-            // for system locale
+            // for system locale. We need to make sure the languages are the same, to prevent
+            // locales like "fil" (Filipino) being matched by "fi" (Finnish).
+            //
             // For instance, it's clearly applicable for cases like system locale = en_US and
             // subtype = en, but it is not necessarily considered applicable for cases like system
             // locale = en and subtype = en_US.
+            //
             // We just call systemLocale.startsWith(locale) in this function because there is no
             // need to find applicable subtypes aggressively unlike
             // findLastResortApplicableSubtypeLocked.
-            if (systemLocale.startsWith(locale)) {
+            //
+            // TODO: This check is broken. It won't take scripts into account and doesn't
+            // account for the mandatory conversions performed by Locale#toString.
+            if (language.equals(systemLanguage) && systemLocale.startsWith(locale)) {
                 final InputMethodSubtype applicableSubtype = applicableModeAndSubtypesMap.get(mode);
                 // If more applicable subtypes are contained, skip.
                 if (applicableSubtype != null) {
@@ -296,6 +343,18 @@ public class InputMethodUtils {
     }
 
     /**
+     * Returns the language component of a given locale string.
+     */
+    private static String getLanguageFromLocaleString(String locale) {
+        final int idx = locale.indexOf('_');
+        if (idx < 0) {
+            return locale;
+        } else {
+            return locale.substring(0, idx);
+        }
+    }
+
+    /**
      * If there are no selected subtypes, tries finding the most applicable one according to the
      * given locale.
      * @param subtypes this function will search the most applicable subtype in subtypes
@@ -314,7 +373,7 @@ public class InputMethodUtils {
         if (TextUtils.isEmpty(locale)) {
             locale = res.getConfiguration().locale.toString();
         }
-        final String language = locale.substring(0, 2);
+        final String language = getLanguageFromLocaleString(locale);
         boolean partialMatchFound = false;
         InputMethodSubtype applicableSubtype = null;
         InputMethodSubtype firstMatchedModeSubtype = null;
@@ -322,6 +381,7 @@ public class InputMethodUtils {
         for (int i = 0; i < N; ++i) {
             InputMethodSubtype subtype = subtypes.get(i);
             final String subtypeLocale = subtype.getLocale();
+            final String subtypeLanguage = getLanguageFromLocaleString(subtypeLocale);
             // An applicable subtype should match "mode". If mode is null, mode will be ignored,
             // and all subtypes with all modes can be candidates.
             if (mode == null || subtypes.get(i).getMode().equalsIgnoreCase(mode)) {
@@ -332,7 +392,7 @@ public class InputMethodUtils {
                     // Exact match (e.g. system locale is "en_US" and subtype locale is "en_US")
                     applicableSubtype = subtype;
                     break;
-                } else if (!partialMatchFound && subtypeLocale.startsWith(language)) {
+                } else if (!partialMatchFound && language.equals(subtypeLanguage)) {
                     // Partial match (e.g. system locale is "en_US" and subtype locale is "en")
                     applicableSubtype = subtype;
                     partialMatchFound = true;
@@ -432,6 +492,17 @@ public class InputMethodUtils {
         }
     }
 
+    public static CharSequence getImeAndSubtypeDisplayName(Context context, InputMethodInfo imi,
+            InputMethodSubtype subtype) {
+        final CharSequence imiLabel = imi.loadLabel(context.getPackageManager());
+        return subtype != null
+                ? TextUtils.concat(subtype.getDisplayName(context,
+                        imi.getPackageName(), imi.getServiceInfo().applicationInfo),
+                                (TextUtils.isEmpty(imiLabel) ?
+                                        "" : " - " + imiLabel))
+                : imiLabel;
+    }
+
     /**
      * Utility class for putting and getting settings for InputMethod
      * TODO: Move all putters and getters of settings to this class.
@@ -508,7 +579,7 @@ public class InputMethodUtils {
             return InputMethodSubtype.sort(context, 0, imi, enabledSubtypes);
         }
 
-        private List<InputMethodSubtype> getEnabledInputMethodSubtypeListLocked(
+        public List<InputMethodSubtype> getEnabledInputMethodSubtypeListLocked(
                 InputMethodInfo imi) {
             List<Pair<String, ArrayList<String>>> imsList =
                     getEnabledInputMethodsAndSubtypeListLocked();

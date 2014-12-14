@@ -16,7 +16,6 @@
 
 package android.view;
 
-import android.graphics.Bitmap;
 import android.graphics.Matrix;
 
 import java.util.ArrayList;
@@ -25,12 +24,7 @@ import java.util.ArrayList;
  * An implementation of display list for OpenGL ES 2.0.
  */
 class GLES20DisplayList extends DisplayList {
-    // These lists ensure that any Bitmaps and DisplayLists recorded by a DisplayList are kept
-    // alive as long as the DisplayList is alive.  The Bitmap and DisplayList lists
-    // are populated by the GLES20RecordingCanvas during appropriate drawing calls and are
-    // cleared at the start of a new drawing frame or when the view is detached from the window.
-    final ArrayList<Bitmap> mBitmaps = new ArrayList<Bitmap>(5);
-    final ArrayList<DisplayList> mChildDisplayLists = new ArrayList<DisplayList>();
+    private ArrayList<DisplayList> mChildDisplayLists;
 
     private GLES20RecordingCanvas mCanvas;
     private boolean mValid;
@@ -50,7 +44,7 @@ class GLES20DisplayList extends DisplayList {
         return mValid && mFinalizer != null;
     }
 
-    int getNativeDisplayList() {
+    long getNativeDisplayList() {
         if (!mValid || mFinalizer == null) {
             throw new IllegalStateException("The display list is not valid.");
         }
@@ -83,8 +77,16 @@ class GLES20DisplayList extends DisplayList {
         }
         mValid = false;
 
-        mBitmaps.clear();
-        mChildDisplayLists.clear();
+        clearReferences();
+    }
+
+    void clearReferences() {
+        if (mChildDisplayLists != null) mChildDisplayLists.clear();
+    }
+
+    ArrayList<DisplayList> getChildDisplayLists() {
+        if (mChildDisplayLists == null) mChildDisplayLists = new ArrayList<DisplayList>();
+        return mChildDisplayLists;
     }
 
     @Override
@@ -92,6 +94,7 @@ class GLES20DisplayList extends DisplayList {
         if (hasNativeDisplayList()) {
             nReset(mFinalizer.mNativeDisplayList);
         }
+        clear();
     }
 
     @Override
@@ -121,9 +124,9 @@ class GLES20DisplayList extends DisplayList {
         return nGetDisplayListSize(mFinalizer.mNativeDisplayList);
     }
 
-    private static native void nDestroyDisplayList(int displayList);
-    private static native int nGetDisplayListSize(int displayList);
-    private static native void nSetDisplayListName(int displayList, String name);
+    private static native void nDestroyDisplayList(long displayList);
+    private static native int nGetDisplayListSize(long displayList);
+    private static native void nSetDisplayListName(long displayList, String name);
 
     ///////////////////////////////////////////////////////////////////////////
     // Native View Properties
@@ -437,62 +440,62 @@ class GLES20DisplayList extends DisplayList {
         }
     }
 
-    private static native void nReset(int displayList);
-    private static native void nOffsetTopAndBottom(int displayList, float offset);
-    private static native void nOffsetLeftAndRight(int displayList, float offset);
-    private static native void nSetLeftTopRightBottom(int displayList, int left, int top,
+    private static native void nReset(long displayList);
+    private static native void nOffsetTopAndBottom(long displayList, float offset);
+    private static native void nOffsetLeftAndRight(long displayList, float offset);
+    private static native void nSetLeftTopRightBottom(long displayList, int left, int top,
             int right, int bottom);
-    private static native void nSetBottom(int displayList, int bottom);
-    private static native void nSetRight(int displayList, int right);
-    private static native void nSetTop(int displayList, int top);
-    private static native void nSetLeft(int displayList, int left);
-    private static native void nSetCameraDistance(int displayList, float distance);
-    private static native void nSetPivotY(int displayList, float pivotY);
-    private static native void nSetPivotX(int displayList, float pivotX);
-    private static native void nSetCaching(int displayList, boolean caching);
-    private static native void nSetClipToBounds(int displayList, boolean clipToBounds);
-    private static native void nSetAlpha(int displayList, float alpha);
-    private static native void nSetHasOverlappingRendering(int displayList,
+    private static native void nSetBottom(long displayList, int bottom);
+    private static native void nSetRight(long displayList, int right);
+    private static native void nSetTop(long displayList, int top);
+    private static native void nSetLeft(long displayList, int left);
+    private static native void nSetCameraDistance(long displayList, float distance);
+    private static native void nSetPivotY(long displayList, float pivotY);
+    private static native void nSetPivotX(long displayList, float pivotX);
+    private static native void nSetCaching(long displayList, boolean caching);
+    private static native void nSetClipToBounds(long displayList, boolean clipToBounds);
+    private static native void nSetAlpha(long displayList, float alpha);
+    private static native void nSetHasOverlappingRendering(long displayList,
             boolean hasOverlappingRendering);
-    private static native void nSetTranslationX(int displayList, float translationX);
-    private static native void nSetTranslationY(int displayList, float translationY);
-    private static native void nSetRotation(int displayList, float rotation);
-    private static native void nSetRotationX(int displayList, float rotationX);
-    private static native void nSetRotationY(int displayList, float rotationY);
-    private static native void nSetScaleX(int displayList, float scaleX);
-    private static native void nSetScaleY(int displayList, float scaleY);
-    private static native void nSetTransformationInfo(int displayList, float alpha,
+    private static native void nSetTranslationX(long displayList, float translationX);
+    private static native void nSetTranslationY(long displayList, float translationY);
+    private static native void nSetRotation(long displayList, float rotation);
+    private static native void nSetRotationX(long displayList, float rotationX);
+    private static native void nSetRotationY(long displayList, float rotationY);
+    private static native void nSetScaleX(long displayList, float scaleX);
+    private static native void nSetScaleY(long displayList, float scaleY);
+    private static native void nSetTransformationInfo(long displayList, float alpha,
             float translationX, float translationY, float rotation, float rotationX,
             float rotationY, float scaleX, float scaleY);
-    private static native void nSetStaticMatrix(int displayList, int nativeMatrix);
-    private static native void nSetAnimationMatrix(int displayList, int animationMatrix);
+    private static native void nSetStaticMatrix(long displayList, long nativeMatrix);
+    private static native void nSetAnimationMatrix(long displayList, long animationMatrix);
 
-    private static native boolean nHasOverlappingRendering(int displayList);
-    private static native void nGetMatrix(int displayList, int matrix);
-    private static native float nGetAlpha(int displayList);
-    private static native float nGetLeft(int displayList);
-    private static native float nGetTop(int displayList);
-    private static native float nGetRight(int displayList);
-    private static native float nGetBottom(int displayList);
-    private static native float nGetCameraDistance(int displayList);
-    private static native float nGetScaleX(int displayList);
-    private static native float nGetScaleY(int displayList);
-    private static native float nGetTranslationX(int displayList);
-    private static native float nGetTranslationY(int displayList);
-    private static native float nGetRotation(int displayList);
-    private static native float nGetRotationX(int displayList);
-    private static native float nGetRotationY(int displayList);
-    private static native float nGetPivotX(int displayList);
-    private static native float nGetPivotY(int displayList);
+    private static native boolean nHasOverlappingRendering(long displayList);
+    private static native void nGetMatrix(long displayList, long matrix);
+    private static native float nGetAlpha(long displayList);
+    private static native float nGetLeft(long displayList);
+    private static native float nGetTop(long displayList);
+    private static native float nGetRight(long displayList);
+    private static native float nGetBottom(long displayList);
+    private static native float nGetCameraDistance(long displayList);
+    private static native float nGetScaleX(long displayList);
+    private static native float nGetScaleY(long displayList);
+    private static native float nGetTranslationX(long displayList);
+    private static native float nGetTranslationY(long displayList);
+    private static native float nGetRotation(long displayList);
+    private static native float nGetRotationX(long displayList);
+    private static native float nGetRotationY(long displayList);
+    private static native float nGetPivotX(long displayList);
+    private static native float nGetPivotY(long displayList);
 
     ///////////////////////////////////////////////////////////////////////////
     // Finalization
     ///////////////////////////////////////////////////////////////////////////
 
     private static class DisplayListFinalizer {
-        final int mNativeDisplayList;
+        final long mNativeDisplayList;
 
-        public DisplayListFinalizer(int nativeDisplayList) {
+        public DisplayListFinalizer(long nativeDisplayList) {
             mNativeDisplayList = nativeDisplayList;
         }
 

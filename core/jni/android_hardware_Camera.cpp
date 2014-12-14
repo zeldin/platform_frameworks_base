@@ -113,7 +113,7 @@ sp<Camera> get_native_camera(JNIEnv *env, jobject thiz, JNICameraContext** pCont
 {
     sp<Camera> camera;
     Mutex::Autolock _l(sLock);
-    JNICameraContext* context = reinterpret_cast<JNICameraContext*>(env->GetIntField(thiz, fields.context));
+    JNICameraContext* context = reinterpret_cast<JNICameraContext*>(env->GetLongField(thiz, fields.context));
     if (context != NULL) {
         camera = context->getCamera();
     }
@@ -500,7 +500,7 @@ static void android_hardware_Camera_native_setup(JNIEnv *env, jobject thiz,
     camera->setListener(context);
 
     // save context in opaque field
-    env->SetIntField(thiz, fields.context, (int)context.get());
+    env->SetLongField(thiz, fields.context, (jlong)context.get());
 }
 
 // disconnect from camera service
@@ -515,10 +515,10 @@ static void android_hardware_Camera_release(JNIEnv *env, jobject thiz)
     sp<Camera> camera;
     {
         Mutex::Autolock _l(sLock);
-        context = reinterpret_cast<JNICameraContext*>(env->GetIntField(thiz, fields.context));
+        context = reinterpret_cast<JNICameraContext*>(env->GetLongField(thiz, fields.context));
 
         // Make sure we do not attempt to callback on a deleted Java object.
-        env->SetIntField(thiz, fields.context, 0);
+        env->SetLongField(thiz, fields.context, 0);
     }
 
     // clean up if release has not been called before
@@ -553,7 +553,7 @@ static void android_hardware_Camera_setPreviewDisplay(JNIEnv *env, jobject thiz,
         }
     }
 
-    if (camera->setPreviewTexture(gbp) != NO_ERROR) {
+    if (camera->setPreviewTarget(gbp) != NO_ERROR) {
         jniThrowException(env, "java/io/IOException", "setPreviewTexture failed");
     }
 }
@@ -565,14 +565,10 @@ static void android_hardware_Camera_setPreviewTexture(JNIEnv *env,
     sp<Camera> camera = get_native_camera(env, thiz, NULL);
     if (camera == 0) return;
 
-    sp<BufferQueue> bufferQueue = NULL;
+    sp<IGraphicBufferProducer> producer = NULL;
     if (jSurfaceTexture != NULL) {
-        sp<GLConsumer> surfaceTexture =
-            SurfaceTexture_getSurfaceTexture(env, jSurfaceTexture);
-        if (surfaceTexture != NULL) {
-            bufferQueue = surfaceTexture->getBufferQueue();
-        }
-        else {
+        producer = SurfaceTexture_getProducer(env, jSurfaceTexture);
+        if (producer == NULL) {
             jniThrowException(env, "java/lang/IllegalArgumentException",
                     "SurfaceTexture already released in setPreviewTexture");
             return;
@@ -580,9 +576,33 @@ static void android_hardware_Camera_setPreviewTexture(JNIEnv *env,
 
     }
 
-    if (camera->setPreviewTexture(bufferQueue) != NO_ERROR) {
+    if (camera->setPreviewTarget(producer) != NO_ERROR) {
         jniThrowException(env, "java/io/IOException",
                 "setPreviewTexture failed");
+    }
+}
+
+static void android_hardware_Camera_setPreviewCallbackSurface(JNIEnv *env,
+        jobject thiz, jobject jSurface)
+{
+    ALOGV("setPreviewCallbackSurface");
+    JNICameraContext* context;
+    sp<Camera> camera = get_native_camera(env, thiz, &context);
+    if (camera == 0) return;
+
+    sp<IGraphicBufferProducer> gbp;
+    sp<Surface> surface;
+    if (jSurface) {
+        surface = android_view_Surface_getSurface(env, jSurface);
+        if (surface != NULL) {
+            gbp = surface->getIGraphicBufferProducer();
+        }
+    }
+    // Clear out normal preview callbacks
+    context->setCallbackMode(env, false, false);
+    // Then set up callback surface
+    if (camera->setPreviewCallbackTarget(gbp) != NO_ERROR) {
+        jniThrowException(env, "java/io/IOException", "setPreviewCallbackTarget failed");
     }
 }
 
@@ -607,13 +627,13 @@ static void android_hardware_Camera_stopPreview(JNIEnv *env, jobject thiz)
     c->stopPreview();
 }
 
-static bool android_hardware_Camera_previewEnabled(JNIEnv *env, jobject thiz)
+static jboolean android_hardware_Camera_previewEnabled(JNIEnv *env, jobject thiz)
 {
     ALOGV("previewEnabled");
     sp<Camera> c = get_native_camera(env, thiz, NULL);
-    if (c == 0) return false;
+    if (c == 0) return JNI_FALSE;
 
-    return c->previewEnabled();
+    return c->previewEnabled() ? JNI_TRUE : JNI_FALSE;
 }
 
 static void android_hardware_Camera_setHasPreviewCallback(JNIEnv *env, jobject thiz, jboolean installed, jboolean manualBuffer)
@@ -631,10 +651,10 @@ static void android_hardware_Camera_setHasPreviewCallback(JNIEnv *env, jobject t
     context->setCallbackMode(env, installed, manualBuffer);
 }
 
-static void android_hardware_Camera_addCallbackBuffer(JNIEnv *env, jobject thiz, jbyteArray bytes, int msgType) {
+static void android_hardware_Camera_addCallbackBuffer(JNIEnv *env, jobject thiz, jbyteArray bytes, jint msgType) {
     ALOGV("addCallbackBuffer: 0x%x", msgType);
 
-    JNICameraContext* context = reinterpret_cast<JNICameraContext*>(env->GetIntField(thiz, fields.context));
+    JNICameraContext* context = reinterpret_cast<JNICameraContext*>(env->GetLongField(thiz, fields.context));
 
     if (context != NULL) {
         context->addCallbackBuffer(env, bytes, msgType);
@@ -665,7 +685,7 @@ static void android_hardware_Camera_cancelAutoFocus(JNIEnv *env, jobject thiz)
     }
 }
 
-static void android_hardware_Camera_takePicture(JNIEnv *env, jobject thiz, int msgType)
+static void android_hardware_Camera_takePicture(JNIEnv *env, jobject thiz, jint msgType)
 {
     ALOGV("takePicture");
     JNICameraContext* context;
@@ -881,6 +901,9 @@ static JNINativeMethod camMethods[] = {
   { "setPreviewTexture",
     "(Landroid/graphics/SurfaceTexture;)V",
     (void *)android_hardware_Camera_setPreviewTexture },
+  { "setPreviewCallbackSurface",
+    "(Landroid/view/Surface;)V",
+    (void *)android_hardware_Camera_setPreviewCallbackSurface },
   { "startPreview",
     "()V",
     (void *)android_hardware_Camera_startPreview },
@@ -976,7 +999,7 @@ static int find_fields(JNIEnv *env, field *fields, int count)
 int register_android_hardware_Camera(JNIEnv *env)
 {
     field fields_to_find[] = {
-        { "android/hardware/Camera", "mNativeContext",   "I", &fields.context },
+        { "android/hardware/Camera", "mNativeContext",   "J", &fields.context },
         { "android/hardware/Camera$CameraInfo", "facing",   "I", &fields.facing },
         { "android/hardware/Camera$CameraInfo", "orientation",   "I", &fields.orientation },
         { "android/hardware/Camera$CameraInfo", "canDisableShutterSound",   "Z",

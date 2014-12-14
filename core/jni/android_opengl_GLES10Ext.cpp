@@ -63,6 +63,12 @@ static void glVertexAttribPointerBounds(GLuint indx, GLint size, GLenum type,
     glVertexAttribPointer(indx, size, type, normalized, stride, pointer);
 }
 #endif
+#ifdef GL_ES_VERSION_3_0
+static void glVertexAttribIPointerBounds(GLuint indx, GLint size, GLenum type,
+        GLsizei stride, const GLvoid *pointer, GLsizei count) {
+    glVertexAttribIPointer(indx, size, type, stride, pointer);
+}
+#endif
 }
 
 /* Cache method IDs each time the class is loaded. */
@@ -105,7 +111,7 @@ getPointer(JNIEnv *_env, jobject buffer, jarray *array, jint *remaining, jint *o
             getBasePointerID, buffer);
     if (pointer != 0L) {
         *array = NULL;
-        return (void *) (jint) pointer;
+        return reinterpret_cast<void*>(pointer);
     }
 
     *array = (jarray) _env->CallStaticObjectMethod(nioAccessClass,
@@ -288,6 +294,7 @@ getarray
     int _needed = 0;
 
     params = (CTYPE *)getPointer(_env, params_buf, &_array, &_remaining, &_bufferOffset);
+    _remaining /= sizeof(CTYPE);    // convert from bytes to item count
     _needed = getNeededCount(pname);
     // if we didn't find this pname, we just assume the user passed
     // an array of the right size -- this might happen with extensions
@@ -395,7 +402,7 @@ exit:
     if (_exception) {
         jniThrowException(_env, _exceptionType, _exceptionMessage);
     }
-    return _returnValue;
+    return (jint)_returnValue;
 }
 
 /* GLbitfield glQueryMatrixxOES ( GLfixed *mantissa, GLint *exponent ) */
@@ -452,7 +459,7 @@ exit:
     if (_exception) {
         jniThrowException(_env, _exceptionType, _exceptionMessage);
     }
-    return _returnValue;
+    return (jint)_returnValue;
 }
 
 static const char *classPathName = "android/opengl/GLES10Ext";

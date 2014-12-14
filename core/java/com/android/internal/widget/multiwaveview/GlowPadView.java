@@ -76,7 +76,7 @@ public class GlowPadView extends View {
     }
 
     // Tuneable parameters for animation
-    private static final int WAVE_ANIMATION_DURATION = 1350;
+    private static final int WAVE_ANIMATION_DURATION = 1000;
     private static final int RETURN_TO_HOME_DELAY = 1200;
     private static final int RETURN_TO_HOME_DURATION = 200;
     private static final int HIDE_ANIMATION_DELAY = 200;
@@ -857,7 +857,7 @@ public class GlowPadView extends View {
             // tx and ty are relative to wave center
             float tx = eventX - mWaveCenterX;
             float ty = eventY - mWaveCenterY;
-            float touchRadius = (float) Math.sqrt(dist2(tx, ty));
+            float touchRadius = (float) Math.hypot(tx, ty);
             final float scale = touchRadius > mOuterRadius ? mOuterRadius / touchRadius : 1.0f;
             float limitX = tx * scale;
             float limitY = ty * scale;

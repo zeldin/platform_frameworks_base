@@ -57,6 +57,7 @@ class WifiController extends StateMachine {
     private int mStayAwakeConditions;
     private long mIdleMillis;
     private int mSleepPolicy;
+    private boolean mFirstUserSignOnSeen = false;
 
     private AlarmManager mAlarmManager;
     private PendingIntent mIdleIntent;
@@ -113,6 +114,7 @@ class WifiController extends StateMachine {
     static final int CMD_AIRPLANE_TOGGLED           = BASE + 9;
     static final int CMD_SET_AP                     = BASE + 10;
     static final int CMD_DEFERRED_TOGGLE            = BASE + 11;
+    static final int CMD_USER_PRESENT               = BASE + 12;
 
     private DefaultState mDefaultState = new DefaultState();
     private StaEnabledState mStaEnabledState = new StaEnabledState();
@@ -150,11 +152,21 @@ class WifiController extends StateMachine {
             addState(mStaDisabledWithScanState, mDefaultState);
             addState(mApEnabledState, mDefaultState);
             addState(mEcmState, mDefaultState);
-        if (mSettingsStore.isScanAlwaysAvailable()) {
+
+        boolean isAirplaneModeOn = mSettingsStore.isAirplaneModeOn();
+        boolean isWifiEnabled = mSettingsStore.isWifiToggleEnabled();
+        boolean isScanningAlwaysAvailable = mSettingsStore.isScanAlwaysAvailable();
+
+        log("isAirplaneModeOn = " + isAirplaneModeOn +
+                ", isWifiEnabled = " + isWifiEnabled +
+                ", isScanningAvailable = " + isScanningAlwaysAvailable);
+
+        if (isWifiEnabled && isScanningAlwaysAvailable) {
             setInitialState(mStaDisabledWithScanState);
         } else {
             setInitialState(mApStaDisabledState);
         }
+
         setLogRecSize(100);
         setLogOnlyTransitions(false);
 
@@ -360,6 +372,9 @@ class WifiController extends StateMachine {
                 case CMD_WIFI_TOGGLED:
                 case CMD_AIRPLANE_TOGGLED:
                 case CMD_EMERGENCY_MODE_CHANGED:
+                    break;
+                case CMD_USER_PRESENT:
+                    mFirstUserSignOnSeen = true;
                     break;
                 case CMD_DEFERRED_TOGGLE:
                     log("DEFERRED_TOGGLE ignored due to state change");
@@ -639,6 +654,15 @@ class WifiController extends StateMachine {
             if (msg.what == CMD_DEVICE_IDLE) {
                 checkLocksAndTransitionWhenDeviceIdle();
                 // We let default state handle the rest of work
+            } else if (msg.what == CMD_USER_PRESENT) {
+                // TLS networks can't connect until user unlocks keystore. KeyStore
+                // unlocks when the user punches PIN after the reboot. So use this
+                // trigger to get those networks connected.
+                if (mFirstUserSignOnSeen == false) {
+                    mWifiStateMachine.reloadTlsNetworksAndReconnect();
+                }
+                mFirstUserSignOnSeen = true;
+                return HANDLED;
             }
             return NOT_HANDLED;
         }

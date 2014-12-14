@@ -315,6 +315,14 @@ public class ApplicationInfo extends PackageItemInfo implements Parcelable {
     public static final int FLAG_IS_DATA_ONLY = 1<<24;
 
     /**
+     * Value for {@link #flags}: set to {@code true} if the application
+     * is permitted to hold privileged permissions.
+     *
+     * {@hide}
+     */
+    public static final int FLAG_PRIVILEGED = 1<<30;
+
+    /**
      * Value for {@link #flags}: Set to true if the application has been
      * installed using the forward lock option.
      *
@@ -338,6 +346,13 @@ public class ApplicationInfo extends PackageItemInfo implements Parcelable {
     public static final int FLAG_CANT_SAVE_STATE = 1<<28;
 
     /**
+     * Value for {@link #flags}: true if the application is blocked via restrictions and for
+     * most purposes is considered as not installed.
+     * {@hide}
+     */
+    public static final int FLAG_BLOCKED = 1<<27;
+
+    /**
      * Flags associated with the application.  Any combination of
      * {@link #FLAG_SYSTEM}, {@link #FLAG_DEBUGGABLE}, {@link #FLAG_HAS_CODE},
      * {@link #FLAG_PERSISTENT}, {@link #FLAG_FACTORY_TEST}, and
@@ -351,7 +366,7 @@ public class ApplicationInfo extends PackageItemInfo implements Parcelable {
      * {@link #FLAG_INSTALLED}.
      */
     public int flags = 0;
-    
+
     /**
      * The required smallest screen width the application can run on.  If 0,
      * nothing has been specified.  Comes from
@@ -424,6 +439,15 @@ public class ApplicationInfo extends PackageItemInfo implements Parcelable {
      * Full path to the directory where native JNI libraries are stored.
      */
     public String nativeLibraryDir;
+
+    /**
+     * The ABI that this application requires, This is inferred from the ABIs
+     * of the native JNI libraries the application bundles. Will be {@code null}
+     * if this application does not require any particular ABI.
+     *
+     * {@hide}
+     */
+    public String cpuAbi;
 
     /**
      * The kernel user-ID that has been assigned to this application;
@@ -555,6 +579,7 @@ public class ApplicationInfo extends PackageItemInfo implements Parcelable {
         sourceDir = orig.sourceDir;
         publicSourceDir = orig.publicSourceDir;
         nativeLibraryDir = orig.nativeLibraryDir;
+        cpuAbi = orig.cpuAbi;
         resourceDirs = orig.resourceDirs;
         seinfo = orig.seinfo;
         sharedLibraryFiles = orig.sharedLibraryFiles;
@@ -595,6 +620,7 @@ public class ApplicationInfo extends PackageItemInfo implements Parcelable {
         dest.writeString(sourceDir);
         dest.writeString(publicSourceDir);
         dest.writeString(nativeLibraryDir);
+        dest.writeString(cpuAbi);
         dest.writeStringArray(resourceDirs);
         dest.writeString(seinfo);
         dest.writeStringArray(sharedLibraryFiles);
@@ -634,6 +660,7 @@ public class ApplicationInfo extends PackageItemInfo implements Parcelable {
         sourceDir = source.readString();
         publicSourceDir = source.readString();
         nativeLibraryDir = source.readString();
+        cpuAbi = source.readString();
         resourceDirs = source.readStringArray();
         seinfo = source.readString();
         sharedLibraryFiles = source.readStringArray();

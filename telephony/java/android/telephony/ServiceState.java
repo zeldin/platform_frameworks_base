@@ -693,7 +693,7 @@ public class ServiceState implements Parcelable {
         mOperatorNumeric = m.getString("operator-numeric");
         mIsManualNetworkSelection = m.getBoolean("manual");
         mRilVoiceRadioTechnology = m.getInt("radioTechnology");
-        mRilVoiceRadioTechnology = m.getInt("dataRadioTechnology");
+        mRilDataRadioTechnology = m.getInt("dataRadioTechnology");
         mCssIndicator = m.getBoolean("cssIndicator");
         mNetworkId = m.getInt("networkId");
         mSystemId = m.getInt("systemId");
@@ -797,6 +797,8 @@ public class ServiceState implements Parcelable {
             return TelephonyManager.NETWORK_TYPE_LTE;
         case ServiceState.RIL_RADIO_TECHNOLOGY_HSPAP:
             return TelephonyManager.NETWORK_TYPE_HSPAP;
+        case ServiceState.RIL_RADIO_TECHNOLOGY_GSM:
+            return TelephonyManager.NETWORK_TYPE_GSM;
         default:
             return TelephonyManager.NETWORK_TYPE_UNKNOWN;
         }

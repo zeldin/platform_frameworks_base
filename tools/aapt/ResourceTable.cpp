@@ -14,7 +14,24 @@
 #include <utils/ByteOrder.h>
 #include <stdarg.h>
 
-#define NOISY(x) //x
+// SSIZE: mingw does not have signed size_t == ssize_t.
+// STATUST: mingw does seem to redefine UNKNOWN_ERROR from our enum value, so a cast is necessary.
+#if HAVE_PRINTF_ZD
+#  define SSIZE(x) x
+#  define STATUST(x) x
+#else
+#  define SSIZE(x) (signed size_t)x
+#  define STATUST(x) (status_t)x
+#endif
+
+// Set to true for noisy debug output.
+static const bool kIsDebug = false;
+
+#if PRINT_STRING_METRICS
+static const bool kPrintStringMetrics = true;
+#else
+static const bool kPrintStringMetrics = false;
+#endif
 
 status_t compileXmlFile(const sp<AaptAssets>& assets,
                         const sp<AaptFile>& target,
@@ -25,7 +42,7 @@ status_t compileXmlFile(const sp<AaptAssets>& assets,
     if (root == NULL) {
         return UNKNOWN_ERROR;
     }
-    
+
     return compileXmlFile(assets, root, target, table, options);
 }
 
@@ -76,9 +93,11 @@ status_t compileXmlFile(const sp<AaptAssets>& assets,
     if (hasErrors) {
         return UNKNOWN_ERROR;
     }
-    
-    NOISY(printf("Input XML Resource:\n"));
-    NOISY(root->print());
+
+    if (kIsDebug) {
+        printf("Input XML Resource:\n");
+        root->print();
+    }
     err = root->flatten(target,
             (options&XML_COMPILE_STRIP_COMMENTS) != 0,
             (options&XML_COMPILE_STRIP_RAW_VALUES) != 0);
@@ -86,18 +105,17 @@ status_t compileXmlFile(const sp<AaptAssets>& assets,
         return err;
     }
 
-    NOISY(printf("Output XML Resource:\n"));
-    NOISY(ResXMLTree tree;
+    if (kIsDebug) {
+        printf("Output XML Resource:\n");
+        ResXMLTree tree;
         tree.setTo(target->getData(), target->getSize());
-        printXMLBlock(&tree));
+        printXMLBlock(&tree);
+    }
 
     target->setCompressionMethod(ZipEntry::kCompressDeflated);
     
     return err;
 }
-
-#undef NOISY
-#define NOISY(x) //x
 
 struct flag_entry
 {
@@ -388,7 +406,7 @@ static status_t compileAttribute(const sp<AaptFile>& in,
 
     ssize_t l10nIdx = block.indexOfAttribute(NULL, "localization");
     if (l10nIdx >= 0) {
-        const uint16_t* str = block.getAttributeStringValue(l10nIdx, &len);
+        const char16_t* str = block.getAttributeStringValue(l10nIdx, &len);
         bool error;
         uint32_t l10n_required = parse_flags(str, len, l10nRequiredFlags, &error);
         if (error) {
@@ -576,14 +594,14 @@ status_t parseAndAddBag(Bundle* bundle,
                         const String16& itemIdent,
                         int32_t curFormat,
                         bool isFormatted,
-                        const String16& product,
-                        bool pseudolocalize,
+                        const String16& /* product */,
+                        PseudolocalizationMethod pseudolocalize,
                         const bool overwrite,
                         ResourceTable* outTable)
 {
     status_t err;
     const String16 item16("item");
-    
+
     String16 str;
     Vector<StringPool::entry_style_span> spans;
     err = parseStyledString(bundle, in->getPrintableSource().string(),
@@ -592,16 +610,18 @@ status_t parseAndAddBag(Bundle* bundle,
     if (err != NO_ERROR) {
         return err;
     }
-    
-    NOISY(printf("Adding resource bag entry l=%c%c c=%c%c orien=%d d=%d "
-                 " pid=%s, bag=%s, id=%s: %s\n",
-                 config.language[0], config.language[1],
-                 config.country[0], config.country[1],
-                 config.orientation, config.density,
-                 String8(parentIdent).string(),
-                 String8(ident).string(),
-                 String8(itemIdent).string(),
-                 String8(str).string()));
+
+    if (kIsDebug) {
+        printf("Adding resource bag entry l=%c%c c=%c%c orien=%d d=%d "
+                " pid=%s, bag=%s, id=%s: %s\n",
+                config.language[0], config.language[1],
+                config.country[0], config.country[1],
+                config.orientation, config.density,
+                String8(parentIdent).string(),
+                String8(ident).string(),
+                String8(itemIdent).string(),
+                String8(str).string());
+    }
 
     err = outTable->addBag(SourcePos(in->getPrintableSource(), block->getLineNumber()),
                            myPackage, curType, ident, parentIdent, itemIdent, str,
@@ -636,6 +656,30 @@ bool isInProductList(const String16& needle, const String16& haystack) {
     return false;
 }
 
+/*
+ * A simple container that holds a resource type and name. It is ordered first by type then
+ * by name.
+ */
+struct type_ident_pair_t {
+    String16 type;
+    String16 ident;
+
+    type_ident_pair_t() { };
+    type_ident_pair_t(const String16& t, const String16& i) : type(t), ident(i) { }
+    type_ident_pair_t(const type_ident_pair_t& o) : type(o.type), ident(o.ident) { }
+    inline bool operator < (const type_ident_pair_t& o) const {
+        int cmp = compare_type(type, o.type);
+        if (cmp < 0) {
+            return true;
+        } else if (cmp > 0) {
+            return false;
+        } else {
+            return strictly_order_type(ident, o.ident);
+        }
+    }
+};
+
+
 status_t parseAndAddEntry(Bundle* bundle,
                         const sp<AaptFile>& in,
                         ResXMLTree* block,
@@ -648,8 +692,9 @@ status_t parseAndAddEntry(Bundle* bundle,
                         int32_t curFormat,
                         bool isFormatted,
                         const String16& product,
-                        bool pseudolocalize,
+                        PseudolocalizationMethod pseudolocalize,
                         const bool overwrite,
+                        KeyedVector<type_ident_pair_t, bool>* skippedResourceNames,
                         ResourceTable* outTable)
 {
     status_t err;
@@ -684,6 +729,13 @@ status_t parseAndAddEntry(Bundle* bundle,
 
         if (bundleProduct[0] == '\0') {
             if (strcmp16(String16("default").string(), product.string()) != 0) {
+                /*
+                 * This string has a product other than 'default'. Do not add it,
+                 * but record it so that if we do not see the same string with
+                 * product 'default' or no product, then report an error.
+                 */
+                skippedResourceNames->replaceValueFor(
+                        type_ident_pair_t(curType, ident), true);
                 return NO_ERROR;
             }
         } else {
@@ -705,11 +757,13 @@ status_t parseAndAddEntry(Bundle* bundle,
         }
     }
 
-    NOISY(printf("Adding resource entry l=%c%c c=%c%c orien=%d d=%d id=%s: %s\n",
-                 config.language[0], config.language[1],
-                 config.country[0], config.country[1],
-                 config.orientation, config.density,
-                 String8(ident).string(), String8(str).string()));
+    if (kIsDebug) {
+        printf("Adding resource entry l=%c%c c=%c%c orien=%d d=%d id=%s: %s\n",
+                config.language[0], config.language[1],
+                config.country[0], config.country[1],
+                config.orientation, config.density,
+                String8(ident).string(), String8(str).string());
+    }
 
     err = outTable->addEntry(SourcePos(in->getPrintableSource(), block->getLineNumber()),
                              myPackage, curType, ident, str, &spans, &config,
@@ -797,6 +851,11 @@ status_t compileResourceFile(Bundle* bundle,
 
     DefaultKeyedVector<String16, uint32_t> nextPublicId(0);
 
+    // Stores the resource names that were skipped. Typically this happens when
+    // AAPT is invoked without a product specified and a resource has no
+    // 'default' product attribute.
+    KeyedVector<type_ident_pair_t, bool> skippedResourceNames;
+
     ResXMLTree::event_code_t code;
     do {
         code = block.next();
@@ -817,10 +876,31 @@ status_t compileResourceFile(Bundle* bundle,
     ResTable_config curParams(defParams);
 
     ResTable_config pseudoParams(curParams);
-        pseudoParams.language[0] = 'z';
-        pseudoParams.language[1] = 'z';
-        pseudoParams.country[0] = 'Z';
-        pseudoParams.country[1] = 'Z';
+        pseudoParams.language[0] = 'e';
+        pseudoParams.language[1] = 'n';
+        pseudoParams.country[0] = 'X';
+        pseudoParams.country[1] = 'A';
+
+    ResTable_config pseudoBidiParams(curParams);
+        pseudoBidiParams.language[0] = 'a';
+        pseudoBidiParams.language[1] = 'r';
+        pseudoBidiParams.country[0] = 'X';
+        pseudoBidiParams.country[1] = 'B';
+
+    // We should skip resources for pseudolocales if they were
+    // already added automatically. This is a fix for a transition period when
+    // manually pseudolocalized resources may be expected.
+    // TODO: remove this check after next SDK version release.
+    if ((bundle->getPseudolocalize() & PSEUDO_ACCENTED &&
+         curParams.locale == pseudoParams.locale) ||
+        (bundle->getPseudolocalize() & PSEUDO_BIDI &&
+         curParams.locale == pseudoBidiParams.locale)) {
+        SourcePos(in->getPrintableSource(), 0).warning(
+                "Resource file %s is skipped as pseudolocalization"
+                " was done automatically.",
+                in->getPrintableSource().string());
+        return NO_ERROR;
+    }
 
     while ((code=block.next()) != ResXMLTree::END_DOCUMENT && code != ResXMLTree::BAD_DOCUMENT) {
         if (code == ResXMLTree::START_TAG) {
@@ -1255,8 +1335,8 @@ status_t compileResourceFile(Bundle* bundle,
                 curIsStyled = true;
             } else if (strcmp16(block.getElementName(&len), string16.string()) == 0) {
                 // Note the existence and locale of every string we process
-                char rawLocale[16];
-                curParams.getLocale(rawLocale);
+                char rawLocale[RESTABLE_MAX_LOCALE_LEN];
+                curParams.getBcp47Locale(rawLocale);
                 String8 locale(rawLocale);
                 String16 name;
                 String16 translatable;
@@ -1265,7 +1345,7 @@ status_t compileResourceFile(Bundle* bundle,
                 size_t n = block.getAttributeCount();
                 for (size_t i = 0; i < n; i++) {
                     size_t length;
-                    const uint16_t* attr = block.getAttributeName(i, &length);
+                    const char16_t* attr = block.getAttributeName(i, &length);
                     if (strcmp16(attr, name16.string()) == 0) {
                         name.setTo(block.getAttributeStringValue(i, &length));
                     } else if (strcmp16(attr, translatable16.string()) == 0) {
@@ -1280,9 +1360,9 @@ status_t compileResourceFile(Bundle* bundle,
                         curIsFormatted = false;
                         // Untranslatable strings must only exist in the default [empty] locale
                         if (locale.size() > 0) {
-                            fprintf(stderr, "aapt: warning: string '%s' in %s marked untranslatable but exists"
-                                    " in locale '%s'\n", String8(name).string(),
-                                    bundle->getResourceSourceDirs()[0],
+                            SourcePos(in->getPrintableSource(), block.getLineNumber()).warning(
+                                    "string '%s' marked untranslatable but exists in locale '%s'\n",
+                                    String8(name).string(),
                                     locale.string());
                             // hasErrors = localHasErrors = true;
                         } else {
@@ -1293,7 +1373,10 @@ status_t compileResourceFile(Bundle* bundle,
                             // having no default translation.
                         }
                     } else {
-                        outTable->addLocalization(name, locale);
+                        outTable->addLocalization(
+                                name,
+                                locale,
+                                SourcePos(in->getPrintableSource(), block.getLineNumber()));
                     }
 
                     if (formatted == false16) {
@@ -1305,7 +1388,7 @@ status_t compileResourceFile(Bundle* bundle,
                 curType = string16;
                 curFormat = ResTable_map::TYPE_REFERENCE|ResTable_map::TYPE_STRING;
                 curIsStyled = true;
-                curIsPseudolocalizable = true;
+                curIsPseudolocalizable = fileIsTranslatable && (translatable != false16);
             } else if (strcmp16(block.getElementName(&len), drawable16.string()) == 0) {
                 curTag = &drawable16;
                 curType = drawable16;
@@ -1349,6 +1432,7 @@ status_t compileResourceFile(Bundle* bundle,
                 curTag = &plurals16;
                 curType = plurals16;
                 curIsBag = true;
+                curIsPseudolocalizable = fileIsTranslatable;
             } else if (strcmp16(block.getElementName(&len), array16.string()) == 0) {
                 curTag = &array16;
                 curType = array16;
@@ -1370,16 +1454,23 @@ status_t compileResourceFile(Bundle* bundle,
             } else if (strcmp16(block.getElementName(&len), string_array16.string()) == 0) {
                 // Check whether these strings need valid formats.
                 // (simplified form of what string16 does above)
+                bool isTranslatable = false;
                 size_t n = block.getAttributeCount();
+
+                // Pseudolocalizable by default, unless this string array isn't
+                // translatable.
                 for (size_t i = 0; i < n; i++) {
                     size_t length;
-                    const uint16_t* attr = block.getAttributeName(i, &length);
-                    if (strcmp16(attr, translatable16.string()) == 0
-                            || strcmp16(attr, formatted16.string()) == 0) {
-                        const uint16_t* value = block.getAttributeStringValue(i, &length);
+                    const char16_t* attr = block.getAttributeName(i, &length);
+                    if (strcmp16(attr, formatted16.string()) == 0) {
+                        const char16_t* value = block.getAttributeStringValue(i, &length);
                         if (strcmp16(value, false16.string()) == 0) {
                             curIsFormatted = false;
-                            break;
+                        }
+                    } else if (strcmp16(attr, translatable16.string()) == 0) {
+                        const char16_t* value = block.getAttributeStringValue(i, &length);
+                        if (strcmp16(value, false16.string()) == 0) {
+                            isTranslatable = false;
                         }
                     }
                 }
@@ -1389,7 +1480,7 @@ status_t compileResourceFile(Bundle* bundle,
                 curFormat = ResTable_map::TYPE_REFERENCE|ResTable_map::TYPE_STRING;
                 curIsBag = true;
                 curIsBagReplaceOnOverwrite = true;
-                curIsPseudolocalizable = true;
+                curIsPseudolocalizable = isTranslatable && fileIsTranslatable;
             } else if (strcmp16(block.getElementName(&len), integer_array16.string()) == 0) {
                 curTag = &integer_array16;
                 curType = array16;
@@ -1511,19 +1602,29 @@ status_t compileResourceFile(Bundle* bundle,
 
                         err = parseAndAddBag(bundle, in, &block, curParams, myPackage, curType,
                                 ident, parentIdent, itemIdent, curFormat, curIsFormatted,
-                                product, false, overwrite, outTable);
+                                product, NO_PSEUDOLOCALIZATION, overwrite, outTable);
                         if (err == NO_ERROR) {
                             if (curIsPseudolocalizable && localeIsDefined(curParams)
-                                    && bundle->getPseudolocalize()) {
+                                    && bundle->getPseudolocalize() > 0) {
                                 // pseudolocalize here
-#if 1
-                                block.setPosition(parserPosition);
-                                err = parseAndAddBag(bundle, in, &block, pseudoParams, myPackage,
-                                        curType, ident, parentIdent, itemIdent, curFormat,
-                                        curIsFormatted, product, true, overwrite, outTable);
-#endif
+                                if ((PSEUDO_ACCENTED & bundle->getPseudolocalize()) ==
+                                   PSEUDO_ACCENTED) {
+                                    block.setPosition(parserPosition);
+                                    err = parseAndAddBag(bundle, in, &block, pseudoParams, myPackage,
+                                            curType, ident, parentIdent, itemIdent, curFormat,
+                                            curIsFormatted, product, PSEUDO_ACCENTED,
+                                            overwrite, outTable);
+                                }
+                                if ((PSEUDO_BIDI & bundle->getPseudolocalize()) ==
+                                   PSEUDO_BIDI) {
+                                    block.setPosition(parserPosition);
+                                    err = parseAndAddBag(bundle, in, &block, pseudoBidiParams, myPackage,
+                                            curType, ident, parentIdent, itemIdent, curFormat,
+                                            curIsFormatted, product, PSEUDO_BIDI,
+                                            overwrite, outTable);
+                                }
                             }
-                        } 
+                        }
                         if (err != NO_ERROR) {
                             hasErrors = localHasErrors = true;
                         }
@@ -1544,20 +1645,31 @@ status_t compileResourceFile(Bundle* bundle,
 
                 err = parseAndAddEntry(bundle, in, &block, curParams, myPackage, curType, ident,
                         *curTag, curIsStyled, curFormat, curIsFormatted,
-                        product, false, overwrite, outTable);
+                        product, NO_PSEUDOLOCALIZATION, overwrite, &skippedResourceNames, outTable);
 
                 if (err < NO_ERROR) { // Why err < NO_ERROR instead of err != NO_ERROR?
                     hasErrors = localHasErrors = true;
                 }
                 else if (err == NO_ERROR) {
                     if (curIsPseudolocalizable && localeIsDefined(curParams)
-                            && bundle->getPseudolocalize()) {
+                            && bundle->getPseudolocalize() > 0) {
                         // pseudolocalize here
-                        block.setPosition(parserPosition);
-                        err = parseAndAddEntry(bundle, in, &block, pseudoParams, myPackage, curType,
-                                ident, *curTag, curIsStyled, curFormat,
-                                curIsFormatted, product,
-                                true, overwrite, outTable);
+                        if ((PSEUDO_ACCENTED & bundle->getPseudolocalize()) ==
+                           PSEUDO_ACCENTED) {
+                            block.setPosition(parserPosition);
+                            err = parseAndAddEntry(bundle, in, &block, pseudoParams, myPackage, curType,
+                                    ident, *curTag, curIsStyled, curFormat,
+                                    curIsFormatted, product,
+                                    PSEUDO_ACCENTED, overwrite, &skippedResourceNames, outTable);
+                        }
+                        if ((PSEUDO_BIDI & bundle->getPseudolocalize()) ==
+                           PSEUDO_BIDI) {
+                            block.setPosition(parserPosition);
+                            err = parseAndAddEntry(bundle, in, &block, pseudoBidiParams,
+                                    myPackage, curType, ident, *curTag, curIsStyled, curFormat,
+                                    curIsFormatted, product,
+                                    PSEUDO_BIDI, overwrite, &skippedResourceNames, outTable);
+                        }
                         if (err != NO_ERROR) {
                             hasErrors = localHasErrors = true;
                         }
@@ -1596,7 +1708,31 @@ status_t compileResourceFile(Bundle* bundle,
         }
     }
 
-    return hasErrors ? UNKNOWN_ERROR : NO_ERROR;
+    // For every resource defined, there must be exist one variant with a product attribute
+    // set to 'default' (or no product attribute at all).
+    // We check to see that for every resource that was ignored because of a mismatched
+    // product attribute, some product variant of that resource was processed.
+    for (size_t i = 0; i < skippedResourceNames.size(); i++) {
+        if (skippedResourceNames[i]) {
+            const type_ident_pair_t& p = skippedResourceNames.keyAt(i);
+            if (!outTable->hasBagOrEntry(myPackage, p.type, p.ident)) {
+                const char* bundleProduct =
+                        (bundle->getProduct() == NULL) ? "" : bundle->getProduct();
+                fprintf(stderr, "In resource file %s: %s\n",
+                        in->getPrintableSource().string(),
+                        curParams.toString().string());
+
+                fprintf(stderr, "\t%s '%s' does not match product %s.\n"
+                        "\tYou may have forgotten to include a 'default' product variant"
+                        " of the resource.\n",
+                        String8(p.type).string(), String8(p.ident).string(),
+                        bundleProduct[0] == 0 ? "default" : bundleProduct);
+                return UNKNOWN_ERROR;
+            }
+        }
+    }
+
+    return hasErrors ? STATUST(UNKNOWN_ERROR) : NO_ERROR;
 }
 
 ResourceTable::ResourceTable(Bundle* bundle, const String16& assetsPackage)
@@ -1650,8 +1786,9 @@ status_t ResourceTable::addIncludedResources(Bundle* bundle, const sp<AaptAssets
                 }
             }
             if (id != 0) {
-                NOISY(printf("Including package %s with ID=%d\n",
-                             String8(name).string(), id));
+                if (kIsDebug) {
+                    printf("Including package %s with ID=%d\n", String8(name).string(), id);
+                }
                 sp<Package> p = new Package(name, id);
                 mPackages.add(name, p);
                 mOrderedPackages.add(p);
@@ -1742,7 +1879,7 @@ status_t ResourceTable::startBag(const SourcePos& sourcePos,
                                  const String16& bagParent,
                                  const ResTable_config* params,
                                  bool overlay,
-                                 bool replace, bool isId)
+                                 bool replace, bool /* isId */)
 {
     status_t result = NO_ERROR;
 
@@ -2049,22 +2186,25 @@ uint32_t ResourceTable::getResId(const String16& ref,
         ref.string(), ref.size(), &package, &type, &name,
         defType, defPackage ? defPackage:&mAssetsPackage,
         outErrorMsg, &refOnlyPublic)) {
-        NOISY(printf("Expanding resource: ref=%s\n",
-                     String8(ref).string()));
-        NOISY(printf("Expanding resource: defType=%s\n",
-                     defType ? String8(*defType).string() : "NULL"));
-        NOISY(printf("Expanding resource: defPackage=%s\n",
-                     defPackage ? String8(*defPackage).string() : "NULL"));
-        NOISY(printf("Expanding resource: ref=%s\n", String8(ref).string()));
-        NOISY(printf("Expanded resource: p=%s, t=%s, n=%s, res=0\n",
-                     String8(package).string(), String8(type).string(),
-                     String8(name).string()));
+        if (kIsDebug) {
+            printf("Expanding resource: ref=%s\n", String8(ref).string());
+            printf("Expanding resource: defType=%s\n",
+                    defType ? String8(*defType).string() : "NULL");
+            printf("Expanding resource: defPackage=%s\n",
+                    defPackage ? String8(*defPackage).string() : "NULL");
+            printf("Expanding resource: ref=%s\n", String8(ref).string());
+            printf("Expanded resource: p=%s, t=%s, n=%s, res=0\n",
+                    String8(package).string(), String8(type).string(),
+                    String8(name).string());
+        }
         return 0;
     }
     uint32_t res = getResId(package, type, name, onlyPublic && refOnlyPublic);
-    NOISY(printf("Expanded resource: p=%s, t=%s, n=%s, res=%d\n",
-                 String8(package).string(), String8(type).string(),
-                 String8(name).string(), res));
+    if (kIsDebug) {
+        printf("Expanded resource: p=%s, t=%s, n=%s, res=%d\n",
+                String8(package).string(), String8(type).string(),
+                String8(name).string(), res);
+    }
     if (res == 0) {
         if (outErrorMsg)
             *outErrorMsg = "No resource found that matches the given name";
@@ -2131,9 +2271,11 @@ bool ResourceTable::stringToValue(Res_value* outValue, StringPool* pool,
             } else {
                 configStr = "(null)";
             }
-            NOISY(printf("Adding to pool string style #%d config %s: %s\n",
-                    style != NULL ? style->size() : 0,
-                    configStr.string(), String8(finalStr).string()));
+            if (kIsDebug) {
+                printf("Adding to pool string style #%zu config %s: %s\n",
+                        style != NULL ? style->size() : 0U,
+                        configStr.string(), String8(finalStr).string());
+            }
             if (style != NULL && style->size() > 0) {
                 outValue->data = pool->add(finalStr, *style, configTypeName, config);
             } else {
@@ -2483,8 +2625,8 @@ status_t ResourceTable::addSymbols(const sp<AaptSymbols>& outSymbols) {
                     
                     String16 comment(c->getComment());
                     typeSymbols->appendComment(String8(c->getName()), comment, c->getPos());
-                    //printf("Type symbol %s comment: %s\n", String8(e->getName()).string(),
-                    //     String8(comment).string());
+                    //printf("Type symbol [%08x] %s comment: %s\n", rid,
+                    //        String8(c->getName()).string(), String8(comment).string());
                     comment = c->getTypeComment();
                     typeSymbols->appendTypeComment(String8(c->getName()), comment);
                 } else {
@@ -2501,9 +2643,9 @@ status_t ResourceTable::addSymbols(const sp<AaptSymbols>& outSymbols) {
 
 
 void
-ResourceTable::addLocalization(const String16& name, const String8& locale)
+ResourceTable::addLocalization(const String16& name, const String8& locale, const SourcePos& src)
 {
-    mLocalizations[name].insert(locale);
+    mLocalizations[name][locale] = src;
 }
 
 
@@ -2523,21 +2665,22 @@ ResourceTable::validateLocalizations(void)
     const String8 defaultLocale;
 
     // For all strings...
-    for (map<String16, set<String8> >::iterator nameIter = mLocalizations.begin();
+    for (map<String16, map<String8, SourcePos> >::iterator nameIter = mLocalizations.begin();
          nameIter != mLocalizations.end();
          nameIter++) {
-        const set<String8>& configSet = nameIter->second;   // naming convenience
+        const map<String8, SourcePos>& configSrcMap = nameIter->second;
 
         // Look for strings with no default localization
-        if (configSet.count(defaultLocale) == 0) {
-            fprintf(stdout, "aapt: warning: string '%s' has no default translation in %s; found:",
-                    String8(nameIter->first).string(), mBundle->getResourceSourceDirs()[0]);
-            for (set<String8>::const_iterator locales = configSet.begin();
-                 locales != configSet.end();
-                 locales++) {
-                fprintf(stdout, " %s", (*locales).string());
+        if (configSrcMap.count(defaultLocale) == 0) {
+            SourcePos().warning("string '%s' has no default translation.",
+                    String8(nameIter->first).string());
+            if (mBundle->getVerbose()) {
+                for (map<String8, SourcePos>::const_iterator locales = configSrcMap.begin();
+                    locales != configSrcMap.end();
+                    locales++) {
+                    locales->second.printf("locale %s found", locales->first.string());
+                }
             }
-            fprintf(stdout, "\n");
             // !!! TODO: throw an error here in some circumstances
         }
 
@@ -2547,6 +2690,8 @@ ResourceTable::validateLocalizations(void)
             const char* start = allConfigs;
             const char* comma;
             
+            set<String8> missingConfigs;
+            AaptLocaleValue locale;
             do {
                 String8 config;
                 comma = strchr(start, ',');
@@ -2557,27 +2702,38 @@ ResourceTable::validateLocalizations(void)
                     config.setTo(start);
                 }
 
-                // don't bother with the pseudolocale "zz_ZZ"
-                if (config != "zz_ZZ") {
-                    if (configSet.find(config) == configSet.end()) {
+                if (!locale.initFromFilterString(config)) {
+                    continue;
+                }
+
+                // don't bother with the pseudolocale "en_XA" or "ar_XB"
+                if (config != "en_XA" && config != "ar_XB") {
+                    if (configSrcMap.find(config) == configSrcMap.end()) {
                         // okay, no specific localization found.  it's possible that we are
                         // requiring a specific regional localization [e.g. de_DE] but there is an
                         // available string in the generic language localization [e.g. de];
                         // consider that string to have fulfilled the localization requirement.
                         String8 region(config.string(), 2);
-                        if (configSet.find(region) == configSet.end()) {
-                            if (configSet.count(defaultLocale) == 0) {
-                                fprintf(stdout, "aapt: warning: "
-                                        "**** string '%s' has no default or required localization "
-                                        "for '%s' in %s\n",
-                                        String8(nameIter->first).string(),
-                                        config.string(),
-                                        mBundle->getResourceSourceDirs()[0]);
-                            }
+                        if (configSrcMap.find(region) == configSrcMap.end() &&
+                                configSrcMap.count(defaultLocale) == 0) {
+                            missingConfigs.insert(config);
                         }
                     }
                 }
-           } while (comma != NULL);
+            } while (comma != NULL);
+
+            if (!missingConfigs.empty()) {
+                String8 configStr;
+                for (set<String8>::iterator iter = missingConfigs.begin();
+                     iter != missingConfigs.end();
+                     iter++) {
+                    configStr.appendFormat(" %s", iter->string());
+                }
+                SourcePos().warning("string '%s' is missing %u required localizations:%s",
+                        String8(nameIter->first).string(),
+                        (unsigned int)missingConfigs.size(),
+                        configStr.string());
+            }
         }
     }
 
@@ -2723,9 +2879,9 @@ status_t ResourceTable::flatten(Bundle* bundle, const sp<AaptFile>& dest)
         const size_t typeStringsStart = data->getSize();
         sp<AaptFile> strFile = p->getTypeStringsData();
         ssize_t amt = data->writeData(strFile->getData(), strFile->getSize());
-        #if PRINT_STRING_METRICS
-        fprintf(stderr, "**** type strings: %d\n", amt);
-        #endif
+        if (kPrintStringMetrics) {
+            fprintf(stderr, "**** type strings: %zd\n", SSIZE(amt));
+        }
         strAmt += amt;
         if (amt < 0) {
             return amt;
@@ -2733,9 +2889,9 @@ status_t ResourceTable::flatten(Bundle* bundle, const sp<AaptFile>& dest)
         const size_t keyStringsStart = data->getSize();
         strFile = p->getKeyStringsData();
         amt = data->writeData(strFile->getData(), strFile->getSize());
-        #if PRINT_STRING_METRICS
-        fprintf(stderr, "**** key strings: %d\n", amt);
-        #endif
+        if (kPrintStringMetrics) {
+            fprintf(stderr, "**** key strings: %zd\n", SSIZE(amt));
+        }
         strAmt += amt;
         if (amt < 0) {
             return amt;
@@ -2814,29 +2970,31 @@ status_t ResourceTable::flatten(Bundle* bundle, const sp<AaptFile>& dest)
             for (size_t ci=0; ci<NC; ci++) {
                 ConfigDescription config = t->getUniqueConfigs().itemAt(ci);
 
-                NOISY(printf("Writing config %d config: imsi:%d/%d lang:%c%c cnt:%c%c "
-                     "orien:%d ui:%d touch:%d density:%d key:%d inp:%d nav:%d sz:%dx%d "
-                     "sw%ddp w%ddp h%ddp dir:%d\n",
-                      ti+1,
-                      config.mcc, config.mnc,
-                      config.language[0] ? config.language[0] : '-',
-                      config.language[1] ? config.language[1] : '-',
-                      config.country[0] ? config.country[0] : '-',
-                      config.country[1] ? config.country[1] : '-',
-                      config.orientation,
-                      config.uiMode,
-                      config.touchscreen,
-                      config.density,
-                      config.keyboard,
-                      config.inputFlags,
-                      config.navigation,
-                      config.screenWidth,
-                      config.screenHeight,
-                      config.smallestScreenWidthDp,
-                      config.screenWidthDp,
-                      config.screenHeightDp,
-                      config.layoutDirection));
-                      
+                if (kIsDebug) {
+                    printf("Writing config %zu config: imsi:%d/%d lang:%c%c cnt:%c%c "
+                        "orien:%d ui:%d touch:%d density:%d key:%d inp:%d nav:%d sz:%dx%d "
+                        "sw%ddp w%ddp h%ddp layout:%d\n",
+                        ti + 1,
+                        config.mcc, config.mnc,
+                        config.language[0] ? config.language[0] : '-',
+                        config.language[1] ? config.language[1] : '-',
+                        config.country[0] ? config.country[0] : '-',
+                        config.country[1] ? config.country[1] : '-',
+                        config.orientation,
+                        config.uiMode,
+                        config.touchscreen,
+                        config.density,
+                        config.keyboard,
+                        config.inputFlags,
+                        config.navigation,
+                        config.screenWidth,
+                        config.screenHeight,
+                        config.smallestScreenWidthDp,
+                        config.screenWidthDp,
+                        config.screenHeightDp,
+                        config.screenLayout);
+                }
+
                 if (filterable && !filter.match(config)) {
                     continue;
                 }
@@ -2857,28 +3015,30 @@ status_t ResourceTable::flatten(Bundle* bundle, const sp<AaptFile>& dest)
                 tHeader->entryCount = htodl(N);
                 tHeader->entriesStart = htodl(typeSize);
                 tHeader->config = config;
-                NOISY(printf("Writing type %d config: imsi:%d/%d lang:%c%c cnt:%c%c "
-                     "orien:%d ui:%d touch:%d density:%d key:%d inp:%d nav:%d sz:%dx%d "
-                     "sw%ddp w%ddp h%ddp dir:%d\n",
-                      ti+1,
-                      tHeader->config.mcc, tHeader->config.mnc,
-                      tHeader->config.language[0] ? tHeader->config.language[0] : '-',
-                      tHeader->config.language[1] ? tHeader->config.language[1] : '-',
-                      tHeader->config.country[0] ? tHeader->config.country[0] : '-',
-                      tHeader->config.country[1] ? tHeader->config.country[1] : '-',
-                      tHeader->config.orientation,
-                      tHeader->config.uiMode,
-                      tHeader->config.touchscreen,
-                      tHeader->config.density,
-                      tHeader->config.keyboard,
-                      tHeader->config.inputFlags,
-                      tHeader->config.navigation,
-                      tHeader->config.screenWidth,
-                      tHeader->config.screenHeight,
-                      tHeader->config.smallestScreenWidthDp,
-                      tHeader->config.screenWidthDp,
-                      tHeader->config.screenHeightDp,
-                      tHeader->config.layoutDirection));
+                if (kIsDebug) {
+                    printf("Writing type %zu config: imsi:%d/%d lang:%c%c cnt:%c%c "
+                        "orien:%d ui:%d touch:%d density:%d key:%d inp:%d nav:%d sz:%dx%d "
+                        "sw%ddp w%ddp h%ddp layout:%d\n",
+                        ti + 1,
+                        tHeader->config.mcc, tHeader->config.mnc,
+                        tHeader->config.language[0] ? tHeader->config.language[0] : '-',
+                        tHeader->config.language[1] ? tHeader->config.language[1] : '-',
+                        tHeader->config.country[0] ? tHeader->config.country[0] : '-',
+                        tHeader->config.country[1] ? tHeader->config.country[1] : '-',
+                        tHeader->config.orientation,
+                        tHeader->config.uiMode,
+                        tHeader->config.touchscreen,
+                        tHeader->config.density,
+                        tHeader->config.keyboard,
+                        tHeader->config.inputFlags,
+                        tHeader->config.navigation,
+                        tHeader->config.screenWidth,
+                        tHeader->config.screenHeight,
+                        tHeader->config.smallestScreenWidthDp,
+                        tHeader->config.screenWidthDp,
+                        tHeader->config.screenHeightDp,
+                        tHeader->config.screenLayout);
+                }
                 tHeader->config.swapHtoD();
 
                 // Build the entries inside of this type.
@@ -2955,10 +3115,10 @@ status_t ResourceTable::flatten(Bundle* bundle, const sp<AaptFile>& dest)
 
     ssize_t amt = (dest->getSize()-strStart);
     strAmt += amt;
-    #if PRINT_STRING_METRICS
-    fprintf(stderr, "**** value strings: %d\n", amt);
-    fprintf(stderr, "**** total strings: %d\n", strAmt);
-    #endif
+    if (kPrintStringMetrics) {
+        fprintf(stderr, "**** value strings: %zd\n", SSIZE(amt));
+        fprintf(stderr, "**** total strings: %zd\n", SSIZE(strAmt));
+    }
     
     for (pi=0; pi<flatPackages.size(); pi++) {
         err = dest->writeData(flatPackages[pi]->getData(),
@@ -2973,13 +3133,10 @@ status_t ResourceTable::flatten(Bundle* bundle, const sp<AaptFile>& dest)
         (((uint8_t*)dest->getData()) + dataStart);
     header->header.size = htodl(dest->getSize() - dataStart);
 
-    NOISY(aout << "Resource table:"
-          << HexDump(dest->getData(), dest->getSize()) << endl);
-
-    #if PRINT_STRING_METRICS
-    fprintf(stderr, "**** total resource table size: %d / %d%% strings\n",
-        dest->getSize(), (strAmt*100)/dest->getSize());
-    #endif
+    if (kPrintStringMetrics) {
+        fprintf(stderr, "**** total resource table size: %zu / %zu%% strings\n",
+                dest->getSize(), (size_t)(strAmt*100)/dest->getSize());
+    }
     
     return NO_ERROR;
 }
@@ -3211,7 +3368,7 @@ status_t ResourceTable::Entry::generateAttributes(ResourceTable* table,
 }
 
 status_t ResourceTable::Entry::assignResourceIds(ResourceTable* table,
-                                                 const String16& package)
+                                                 const String16& /* package */)
 {
     bool hasErrors = false;
     
@@ -3244,7 +3401,7 @@ status_t ResourceTable::Entry::assignResourceIds(ResourceTable* table,
             }
         }
     }
-    return hasErrors ? UNKNOWN_ERROR : NO_ERROR;
+    return hasErrors ? STATUST(UNKNOWN_ERROR) : NO_ERROR;
 }
 
 status_t ResourceTable::Entry::prepareFlatten(StringPool* strings, ResourceTable* table,
@@ -3303,22 +3460,20 @@ status_t ResourceTable::Entry::remapStringValue(StringPool* strings)
     return NO_ERROR;
 }
 
-ssize_t ResourceTable::Entry::flatten(Bundle* bundle, const sp<AaptFile>& data, bool isPublic)
+ssize_t ResourceTable::Entry::flatten(Bundle* /* bundle */, const sp<AaptFile>& data, bool isPublic)
 {
     size_t amt = 0;
     ResTable_entry header;
     memset(&header, 0, sizeof(header));
     header.size = htods(sizeof(header));
-    const type ty = this != NULL ? mType : TYPE_ITEM;
-    if (this != NULL) {
-        if (ty == TYPE_BAG) {
-            header.flags |= htods(header.FLAG_COMPLEX);
-        }
-        if (isPublic) {
-            header.flags |= htods(header.FLAG_PUBLIC);
-        }
-        header.key.index = htodl(mNameIndex);
+    const type ty = mType;
+    if (ty == TYPE_BAG) {
+        header.flags |= htods(header.FLAG_COMPLEX);
     }
+    if (isPublic) {
+        header.flags |= htods(header.FLAG_PUBLIC);
+    }
+    header.key.index = htodl(mNameIndex);
     if (ty != TYPE_BAG) {
         status_t err = data->writeData(&header, sizeof(header));
         if (err != NO_ERROR) {
@@ -3493,10 +3648,11 @@ sp<ResourceTable::Entry> ResourceTable::Type::getEntry(const String16& entry,
     
     sp<Entry> e = c->getEntries().valueFor(cdesc);
     if (e == NULL) {
-        if (config != NULL) {
-            NOISY(printf("New entry at %s:%d: imsi:%d/%d lang:%c%c cnt:%c%c "
+        if (kIsDebug) {
+            if (config != NULL) {
+                printf("New entry at %s:%d: imsi:%d/%d lang:%c%c cnt:%c%c "
                     "orien:%d touch:%d density:%d key:%d inp:%d nav:%d sz:%dx%d "
-                    "sw%ddp w%ddp h%ddp dir:%d\n",
+                    "sw%ddp w%ddp h%ddp layout:%d\n",
                       sourcePos.file.string(), sourcePos.line,
                       config->mcc, config->mnc,
                       config->language[0] ? config->language[0] : '-',
@@ -3514,10 +3670,11 @@ sp<ResourceTable::Entry> ResourceTable::Type::getEntry(const String16& entry,
                       config->smallestScreenWidthDp,
                       config->screenWidthDp,
                       config->screenHeightDp,
-                      config->layoutDirection));
-        } else {
-            NOISY(printf("New entry at %s:%d: NULL config\n",
-                      sourcePos.file.string(), sourcePos.line));
+                      config->screenLayout);
+            } else {
+                printf("New entry at %s:%d: NULL config\n",
+                        sourcePos.file.string(), sourcePos.line);
+            }
         }
         e = new Entry(entry, sourcePos);
         c->addEntry(cdesc, e);
@@ -3623,7 +3780,7 @@ status_t ResourceTable::Type::applyPublicEntryOrder()
         j++;
     }
 
-    return hasError ? UNKNOWN_ERROR : NO_ERROR;
+    return hasError ? STATUST(UNKNOWN_ERROR) : NO_ERROR;
 }
 
 ResourceTable::Package::Package(const String16& name, ssize_t includedId)
@@ -3678,9 +3835,6 @@ status_t ResourceTable::Package::setStrings(const sp<AaptFile>& data,
     if (data->getData() == NULL) {
         return UNKNOWN_ERROR;
     }
-
-    NOISY(aout << "Setting restable string pool: "
-          << HexDump(data->getData(), data->getSize()) << endl);
 
     status_t err = strings->setTo(data->getData(), data->getSize());
     if (err == NO_ERROR) {
@@ -3889,7 +4043,7 @@ bool ResourceTable::getItemValue(
         }
         item->evaluating = true;
         res = stringToValue(outValue, NULL, item->value, false, false, item->bagKeyId);
-        NOISY(
+        if (kIsDebug) {
             if (res) {
                 printf("getItemValue of #%08x[#%08x] (%s): type=#%08x, data=#%08x\n",
                        resID, attrID, String8(getEntry(resID)->getName()).string(),
@@ -3898,7 +4052,7 @@ bool ResourceTable::getItemValue(
                 printf("getItemValue of #%08x[#%08x]: failed\n",
                        resID, attrID);
             }
-        );
+        }
         item->evaluating = false;
     }
     return res;

@@ -34,7 +34,9 @@
               Migrating from Eclipse</a></li>
           <li><a href="<?cs var:toroot ?>sdk/installing/studio-tips.html">
               Tips and Tricks</a></li>
-        </ul>
+          <li><a href="<?cs var:toroot ?>sdk/installing/studio-layout.html">
+              Using the Layout Editor</a></li>
+          </ul>
       </li>
       <li><a href="<?cs var:toroot ?>sdk/exploring.html">
           <span class="en">Exploring the SDK</span></a></li>
@@ -56,7 +58,13 @@
           <li><a href="<?cs var:toroot ?>tools/devices/emulator.html"><span class="en">Using the Emulator</span></a></li>
         </ul>
       </li>
-      <li><a href="<?cs var:toroot ?>tools/device.html"><span class="en">Using Hardware Devices</span></a></li>
+      <li class="nav-section">
+        <div class="nav-section-header"><a href="<?cs var:toroot ?>tools/device.html"><span class="en">Using Hardware Devices</span></a></div>
+        <ul>
+          <li><a href="<?cs var:toroot ?>tools/extras/oem-usb.html"><span
+            class="en">USB Drivers</span></a></li>
+        </ul>
+      </li>
       <li class="nav-section">
         <div class="nav-section-header"><a href="<?cs var:toroot ?>tools/projects/index.html"><span class="en">Setting Up Projects</span></a></div>
         <ul>
@@ -132,7 +140,8 @@
       <li><a href="<?cs var:toroot ?>tools/debugging/improving-w-lint.html"><span class="en">Improving Your Code with lint</span></a></li>
       <li><a href="<?cs var:toroot ?>tools/debugging/debugging-ui.html"><span class="en">Optimizing your UI</span></a></li>
       <li><a href="<?cs var:toroot ?>tools/debugging/debugging-tracing.html"><span class="en">Profiling with Traceview and dmtracedump</span></a></li>
-      <li><a href="<?cs var:toroot ?>tools/debugging/systrace.html"><span class="en">Analysing Display and Performance with Systrace</span></a></li>
+      <li><a href="<?cs var:toroot ?>tools/debugging/systrace.html"><span class="en">Analyzing Display and Performance</span></a></li>
+      <li><a href="<?cs var:toroot ?>tools/debugging/debugging-memory.html">Investigating Your RAM Usage</a></li>
       <li><a href="<?cs var:toroot ?>tools/debugging/debugging-devtools.html"><span class="en">Using the Dev Tools App</span></a></li>
     </ul>
   </li>
@@ -144,8 +153,18 @@
           <li><a href="<?cs var:toroot ?>tools/publishing/app-signing.html"><span class="en">Signing Your Apps</span></a></li>
         </ul>
       </li>
-</ul>
-</li>
+    </ul>
+  </li>
+
+  <li class="nav-section">
+    <div class="nav-section-header"><a href="<?cs var:toroot ?>tools/support-library/index.html"><span
+class="en">Support Library</span></a></div>
+    <ul>
+      <li><a href="<?cs var:toroot ?>tools/support-library/features.html">Features</a></li>
+      <li><a href="<?cs var:toroot ?>tools/support-library/setup.html">Setup</a></li>
+    </ul>
+  </li>
+
   <li class="nav-section">
     <div class="nav-section-header"><a href="<?cs var:toroot ?>tools/help/index.html"><span
 class="en">Tools Help</span></a></div>
@@ -208,36 +227,17 @@ class="en">MonkeyRunner</span></a></li>
 ?>tools/revisions/index.html"><span class="en">Revisions</span></a></div>
     <ul>
       <li><a href="<?cs var:toroot ?>tools/sdk/tools-notes.html">
-        <span class="en">Tools</span>
+        <span class="en">SDK Tools</span>
       </a></li>
       <li><a href="<?cs var:toroot ?>tools/sdk/eclipse-adt.html">
         <span class="en">ADT Plugin</span>
       </a></li>
-      <!--
-      <li><a href="<?cs var:toroot ?>tools/sdk/addons.html"><span class="en">Add-ons</span></a></li>
-      -->
+      <li><a href="<?cs var:toroot ?>tools/revisions/build-tools.html">
+        <span class="en">Build Tools</span>
+      </a></li>
       <li><a href="<?cs var:toroot ?>tools/revisions/platforms.html"><span
 class="en">Platforms</span></a></li>
     </ul>
-  </li>
-
-
-  <li class="nav-section">
-    <div class="nav-section-header"><a href="<?cs var:toroot
-?>tools/extras/index.html"><span class="en">Extras</span></a></div>
-    <ul>
-      <li><a href="<?cs var:toroot ?>tools/extras/support-library.html"><span class="en">Support
-Library</span></a></li>
-      <li><a href="<?cs var:toroot ?>tools/extras/oem-usb.html"><span
-class="en">USB Drivers</span></a>
-      </li>
-    </ul>
-  </li>
-
-
-  <li class="nav-section">
-    <div class="nav-section-header empty"><a href="<?cs var:toroot
-?>tools/samples/index.html"><span class="en">Samples</span></a></div>
   </li>
 
 

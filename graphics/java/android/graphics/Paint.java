@@ -32,7 +32,7 @@ public class Paint {
     /**
      * @hide
      */
-    public int mNativePaint;
+    public long mNativePaint;
 
     private ColorFilter mColorFilter;
     private MaskFilter  mMaskFilter;
@@ -87,35 +87,133 @@ public class Paint {
         Align.LEFT, Align.CENTER, Align.RIGHT
     };
 
-    /** bit mask for the flag enabling antialiasing */
+    /**
+     * Paint flag that enables antialiasing when drawing.
+     *
+     * <p>Enabling this flag will cause all draw operations that support
+     * antialiasing to use it.</p>
+     *
+     * @see #Paint(int)
+     * @see #setFlags(int)
+     */
     public static final int ANTI_ALIAS_FLAG     = 0x01;
-    /** bit mask for the flag enabling bitmap filtering */
+    /**
+     * Paint flag that enables bilinear sampling on scaled bitmaps.
+     *
+     * <p>If cleared, scaled bitmaps will be drawn with nearest neighbor
+     * sampling, likely resulting in artifacts. This should generally be on
+     * when drawing bitmaps, unless performance-bound (rendering to software
+     * canvas) or preferring pixelation artifacts to blurriness when scaling
+     * significantly.</p>
+     *
+     * <p>If bitmaps are scaled for device density at creation time (as
+     * resource bitmaps often are) the filtering will already have been
+     * done.</p>
+     *
+     * @see #Paint(int)
+     * @see #setFlags(int)
+     */
     public static final int FILTER_BITMAP_FLAG  = 0x02;
-    /** bit mask for the flag enabling dithering */
+    /**
+     * Paint flag that enables dithering when blitting.
+     *
+     * <p>Enabling this flag applies a dither to any blit operation where the
+     * target's colour space is more constrained than the source.
+     *
+     * @see #Paint(int)
+     * @see #setFlags(int)
+     */
     public static final int DITHER_FLAG         = 0x04;
-    /** bit mask for the flag enabling underline text */
+    /**
+     * Paint flag that applies an underline decoration to drawn text.
+     *
+     * @see #Paint(int)
+     * @see #setFlags(int)
+     */
     public static final int UNDERLINE_TEXT_FLAG = 0x08;
-    /** bit mask for the flag enabling strike-thru text */
+    /**
+     * Paint flag that applies a strike-through decoration to drawn text.
+     *
+     * @see #Paint(int)
+     * @see #setFlags(int)
+     */
     public static final int STRIKE_THRU_TEXT_FLAG = 0x10;
-    /** bit mask for the flag enabling fake-bold text */
+    /**
+     * Paint flag that applies a synthetic bolding effect to drawn text.
+     *
+     * <p>Enabling this flag will cause text draw operations to apply a
+     * simulated bold effect when drawing a {@link Typeface} that is not
+     * already bold.</p>
+     *
+     * @see #Paint(int)
+     * @see #setFlags(int)
+     */
     public static final int FAKE_BOLD_TEXT_FLAG = 0x20;
-    /** bit mask for the flag enabling linear-text (no caching) */
+    /**
+     * Paint flag that enables smooth linear scaling of text.
+     *
+     * <p>Enabling this flag does not actually scale text, but rather adjusts
+     * text draw operations to deal gracefully with smooth adjustment of scale.
+     * When this flag is enabled, font hinting is disabled to prevent shape
+     * deformation between scale factors, and glyph caching is disabled due to
+     * the large number of glyph images that will be generated.</p>
+     *
+     * <p>{@link #SUBPIXEL_TEXT_FLAG} should be used in conjunction with this
+     * flag to prevent glyph positions from snapping to whole pixel values as
+     * scale factor is adjusted.</p>
+     *
+     * @see #Paint(int)
+     * @see #setFlags(int)
+     */
     public static final int LINEAR_TEXT_FLAG    = 0x40;
-    /** bit mask for the flag enabling subpixel-text */
+    /**
+     * Paint flag that enables subpixel positioning of text.
+     *
+     * <p>Enabling this flag causes glyph advances to be computed with subpixel
+     * accuracy.</p>
+     *
+     * <p>This can be used with {@link #LINEAR_TEXT_FLAG} to prevent text from
+     * jittering during smooth scale transitions.</p>
+     *
+     * @see #Paint(int)
+     * @see #setFlags(int)
+     */
     public static final int SUBPIXEL_TEXT_FLAG  = 0x80;
-    /** bit mask for the flag enabling device kerning for text */
+    /** Legacy Paint flag, no longer used. */
     public static final int DEV_KERN_TEXT_FLAG  = 0x100;
+    /** @hide bit mask for the flag enabling subpixel glyph rendering for text */
+    public static final int LCD_RENDER_TEXT_FLAG = 0x200;
+    /**
+     * Paint flag that enables the use of bitmap fonts when drawing text.
+     *
+     * <p>Disabling this flag will prevent text draw operations from using
+     * embedded bitmap strikes in fonts, causing fonts with both scalable
+     * outlines and bitmap strikes to draw only the scalable outlines, and
+     * fonts with only bitmap strikes to not draw at all.</p>
+     *
+     * @see #Paint(int)
+     * @see #setFlags(int)
+     */
+    public static final int EMBEDDED_BITMAP_TEXT_FLAG = 0x400;
+    /** @hide bit mask for the flag forcing freetype's autohinter on for text */
+    public static final int AUTO_HINTING_TEXT_FLAG = 0x800;
+    /** @hide bit mask for the flag enabling vertical rendering for text */
+    public static final int VERTICAL_TEXT_FLAG = 0x1000;
 
     // we use this when we first create a paint
-    static final int DEFAULT_PAINT_FLAGS = DEV_KERN_TEXT_FLAG;
+    static final int DEFAULT_PAINT_FLAGS = DEV_KERN_TEXT_FLAG | EMBEDDED_BITMAP_TEXT_FLAG;
 
     /**
-     * Option for {@link #setHinting}: disable hinting.
+     * Font hinter option that disables font hinting.
+     *
+     * @see #setHinting(int)
      */
     public static final int HINTING_OFF = 0x0;
 
     /**
-     * Option for {@link #setHinting}: enable hinting.
+     * Font hinter option that enables font hinting.
+     *
+     * @see #setHinting(int)
      */
     public static final int HINTING_ON = 0x1;
 
@@ -421,7 +519,11 @@ public class Paint {
         mMaskFilter = paint.mMaskFilter;
         mPathEffect = paint.mPathEffect;
         mRasterizer = paint.mRasterizer;
-        mShader = paint.mShader;
+        if (paint.mShader != null) {
+            mShader = paint.mShader.copy();
+        } else {
+            mShader = null;
+        }
         mTypeface = paint.mTypeface;
         mXfermode = paint.mXfermode;
 
@@ -841,7 +943,7 @@ public class Paint {
      * @return       shader
      */
     public Shader setShader(Shader shader) {
-        int shaderNative = 0;
+        long shaderNative = 0;
         if (shader != null)
             shaderNative = shader.native_instance;
         native_setShader(mNativePaint, shaderNative);
@@ -865,7 +967,7 @@ public class Paint {
      * @return       filter
      */
     public ColorFilter setColorFilter(ColorFilter filter) {
-        int filterNative = 0;
+        long filterNative = 0;
         if (filter != null)
             filterNative = filter.native_instance;
         native_setColorFilter(mNativePaint, filterNative);
@@ -892,7 +994,7 @@ public class Paint {
      * @return         xfermode
      */
     public Xfermode setXfermode(Xfermode xfermode) {
-        int xfermodeNative = 0;
+        long xfermodeNative = 0;
         if (xfermode != null)
             xfermodeNative = xfermode.native_instance;
         native_setXfermode(mNativePaint, xfermodeNative);
@@ -919,7 +1021,7 @@ public class Paint {
      * @return       effect
      */
     public PathEffect setPathEffect(PathEffect effect) {
-        int effectNative = 0;
+        long effectNative = 0;
         if (effect != null) {
             effectNative = effect.native_instance;
         }
@@ -948,7 +1050,7 @@ public class Paint {
      * @return           maskfilter
      */
     public MaskFilter setMaskFilter(MaskFilter maskfilter) {
-        int maskfilterNative = 0;
+        long maskfilterNative = 0;
         if (maskfilter != null) {
             maskfilterNative = maskfilter.native_instance;
         }
@@ -979,7 +1081,7 @@ public class Paint {
      * @return         typeface
      */
     public Typeface setTypeface(Typeface typeface) {
-        int typefaceNative = 0;
+        long typefaceNative = 0;
         if (typeface != null) {
             typefaceNative = typeface.native_instance;
         }
@@ -1010,7 +1112,7 @@ public class Paint {
      * @return           rasterizer
      */
     public Rasterizer setRasterizer(Rasterizer rasterizer) {
-        int rasterizerNative = 0;
+        long rasterizerNative = 0;
         if (rasterizer != null) {
             rasterizerNative = rasterizer.native_instance;
         }
@@ -2105,68 +2207,68 @@ public class Paint {
         }
     }
 
-    private static native int native_init();
-    private static native int native_initWithPaint(int paint);
-    private static native void native_reset(int native_object);
-    private static native void native_set(int native_dst, int native_src);
-    private static native int native_getStyle(int native_object);
-    private static native void native_setStyle(int native_object, int style);
-    private static native int native_getStrokeCap(int native_object);
-    private static native void native_setStrokeCap(int native_object, int cap);
-    private static native int native_getStrokeJoin(int native_object);
-    private static native void native_setStrokeJoin(int native_object,
+    private static native long native_init();
+    private static native long native_initWithPaint(long paint);
+    private static native void native_reset(long native_object);
+    private static native void native_set(long native_dst, long native_src);
+    private static native int native_getStyle(long native_object);
+    private static native void native_setStyle(long native_object, int style);
+    private static native int native_getStrokeCap(long native_object);
+    private static native void native_setStrokeCap(long native_object, int cap);
+    private static native int native_getStrokeJoin(long native_object);
+    private static native void native_setStrokeJoin(long native_object,
                                                     int join);
-    private static native boolean native_getFillPath(int native_object,
-                                                     int src, int dst);
-    private static native int native_setShader(int native_object, int shader);
-    private static native int native_setColorFilter(int native_object,
-                                                    int filter);
-    private static native int native_setXfermode(int native_object,
-                                                 int xfermode);
-    private static native int native_setPathEffect(int native_object,
-                                                   int effect);
-    private static native int native_setMaskFilter(int native_object,
-                                                   int maskfilter);
-    private static native int native_setTypeface(int native_object,
-                                                 int typeface);
-    private static native int native_setRasterizer(int native_object,
-                                                   int rasterizer);
+    private static native boolean native_getFillPath(long native_object,
+                                                     long src, long dst);
+    private static native long native_setShader(long native_object, long shader);
+    private static native long native_setColorFilter(long native_object,
+                                                    long filter);
+    private static native long native_setXfermode(long native_object,
+                                                  long xfermode);
+    private static native long native_setPathEffect(long native_object,
+                                                    long effect);
+    private static native long native_setMaskFilter(long native_object,
+                                                    long maskfilter);
+    private static native long native_setTypeface(long native_object,
+                                                  long typeface);
+    private static native long native_setRasterizer(long native_object,
+                                                   long rasterizer);
 
-    private static native int native_getTextAlign(int native_object);
-    private static native void native_setTextAlign(int native_object,
+    private static native int native_getTextAlign(long native_object);
+    private static native void native_setTextAlign(long native_object,
                                                    int align);
 
-    private static native void native_setTextLocale(int native_object,
+    private static native void native_setTextLocale(long native_object,
                                                     String locale);
 
-    private static native int native_getTextWidths(int native_object,
+    private static native int native_getTextWidths(long native_object,
                             char[] text, int index, int count, int bidiFlags, float[] widths);
-    private static native int native_getTextWidths(int native_object,
+    private static native int native_getTextWidths(long native_object,
                             String text, int start, int end, int bidiFlags, float[] widths);
 
-    private static native int native_getTextGlyphs(int native_object,
+    private static native int native_getTextGlyphs(long native_object,
             String text, int start, int end, int contextStart, int contextEnd,
             int flags, char[] glyphs);
 
-    private static native float native_getTextRunAdvances(int native_object,
+    private static native float native_getTextRunAdvances(long native_object,
             char[] text, int index, int count, int contextIndex, int contextCount,
             int flags, float[] advances, int advancesIndex);
-    private static native float native_getTextRunAdvances(int native_object,
+    private static native float native_getTextRunAdvances(long native_object,
             String text, int start, int end, int contextStart, int contextEnd,
             int flags, float[] advances, int advancesIndex);
 
-    private native int native_getTextRunCursor(int native_object, char[] text,
+    private native int native_getTextRunCursor(long native_object, char[] text,
             int contextStart, int contextLength, int flags, int offset, int cursorOpt);
-    private native int native_getTextRunCursor(int native_object, String text,
+    private native int native_getTextRunCursor(long native_object, String text,
             int contextStart, int contextEnd, int flags, int offset, int cursorOpt);
 
-    private static native void native_getTextPath(int native_object, int bidiFlags,
-                char[] text, int index, int count, float x, float y, int path);
-    private static native void native_getTextPath(int native_object, int bidiFlags,
-                String text, int start, int end, float x, float y, int path);
-    private static native void nativeGetStringBounds(int nativePaint,
+    private static native void native_getTextPath(long native_object, int bidiFlags,
+                char[] text, int index, int count, float x, float y, long path);
+    private static native void native_getTextPath(long native_object, int bidiFlags,
+                String text, int start, int end, float x, float y, long path);
+    private static native void nativeGetStringBounds(long nativePaint,
                                 String text, int start, int end, int bidiFlags, Rect bounds);
-    private static native void nativeGetCharArrayBounds(int nativePaint,
+    private static native void nativeGetCharArrayBounds(long nativePaint,
                                 char[] text, int index, int count, int bidiFlags, Rect bounds);
-    private static native void finalizer(int nativePaint);
+    private static native void finalizer(long nativePaint);
 }

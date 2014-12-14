@@ -49,7 +49,7 @@ public class Build {
     /** The manufacturer of the product/hardware. */
     public static final String MANUFACTURER = getString("ro.product.manufacturer");
 
-    /** The brand (e.g., carrier) the software is customized for, if any. */
+    /** The consumer-visible brand with which the product/hardware will be associated, if any. */
     public static final String BRAND = getString("ro.product.brand");
 
     /** The end-user-visible name for the end product. */
@@ -74,7 +74,41 @@ public class Build {
 
     /** A hardware serial number, if available.  Alphanumeric only, case-insensitive. */ 
     public static final String SERIAL = getString("ro.serialno");
-  
+
+    /**
+     * An ordered list of ABIs supported by this device. The most preferred ABI is the first
+     * element in the list.
+     *
+     * See {@link #SUPPORTED_32_BIT_ABIS} and {@link #SUPPORTED_64_BIT_ABIS}.
+     *
+     * @hide
+     */
+    public static final String[] SUPPORTED_ABIS = SystemProperties.get("ro.product.cpu.abilist")
+            .split(",");
+
+    /**
+     * An ordered list of <b>32 bit</b> ABIs supported by this device. The most preferred ABI
+     * is the first element in the list.
+     *
+     * See {@link #SUPPORTED_ABIS} and {@link #SUPPORTED_64_BIT_ABIS}.
+     *
+     * @hide
+     */
+    public static final String[] SUPPORTED_32_BIT_ABIS =
+            SystemProperties.get("ro.product.cpu.abilist32").split(",");
+
+    /**
+     * An ordered list of <b>64 bit</b> ABIs supported by this device. The most preferred ABI
+     * is the first element in the list.
+     *
+     * See {@link #SUPPORTED_ABIS} and {@link #SUPPORTED_32_BIT_ABIS}.
+     *
+     * @hide
+     */
+    public static final String[] SUPPORTED_64_BIT_ABIS =
+            SystemProperties.get("ro.product.cpu.abilist64").split(",");
+
+
     /** Various version strings. */
     public static class VERSION {
         /**
@@ -436,6 +470,38 @@ public class Build {
          * Android 4.3: Jelly Bean MR2, the revenge of the beans.
          */
         public static final int JELLY_BEAN_MR2 = 18;
+
+        /**
+         * Android 4.4: KitKat, another tasty treat.
+         *
+         * <p>Applications targeting this or a later release will get these
+         * new changes in behavior:</p>
+         * <ul>
+         * <li> The default result of
+         * {@link android.preference.PreferenceActivity#isValidFragment(String)
+         * PreferenceActivity.isValueFragment} becomes false instead of true.</li>
+         * <li> In {@link android.webkit.WebView}, apps targeting earlier versions will have
+         * JS URLs evaluated directly and any result of the evaluation will not replace
+         * the current page content.  Apps targetting KITKAT or later that load a JS URL will
+         * have the result of that URL replace the content of the current page</li>
+         * <li> {@link android.app.AlarmManager#set AlarmManager.set} becomes interpreted as
+         * an inexact value, to give the system more flexibility in scheduling alarms.</li>
+         * <li> {@link android.content.Context#getSharedPreferences(String, int)
+         * Context.getSharedPreferences} no longer allows a null name.</li>
+         * <li> {@link android.widget.RelativeLayout} changes to compute wrapped content
+         * margins correctly.</li>
+         * <li> {@link android.app.ActionBar}'s window content overlay is allowed to be
+         * drawn.</li>
+         * <li>The {@link android.Manifest.permission#READ_EXTERNAL_STORAGE}
+         * permission is now always enforced.</li>
+         * <li>Access to package-specific external storage directories belonging
+         * to the calling app no longer requires the
+         * {@link android.Manifest.permission#READ_EXTERNAL_STORAGE} or
+         * {@link android.Manifest.permission#WRITE_EXTERNAL_STORAGE}
+         * permissions.</li>
+         * </ul>
+         */
+        public static final int KITKAT = 19;
     }
     
     /** The type of build, like "user" or "eng". */

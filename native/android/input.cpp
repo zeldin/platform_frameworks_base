@@ -18,8 +18,8 @@
 #include <utils/Log.h>
 
 #include <android/input.h>
-#include <androidfw/Input.h>
-#include <androidfw/InputTransport.h>
+#include <input/Input.h>
+#include <input/InputTransport.h>
 #include <utils/Looper.h>
 #include <utils/RefBase.h>
 #include <utils/Vector.h>
@@ -273,7 +273,7 @@ float AMotionEvent_getHistoricalAxisValue(const AInputEvent* motion_event,
 void AInputQueue_attachLooper(AInputQueue* queue, ALooper* looper,
         int ident, ALooper_callbackFunc callback, void* data) {
     InputQueue* iq = static_cast<InputQueue*>(queue);
-    Looper* l = static_cast<Looper*>(looper);
+    Looper* l = reinterpret_cast<Looper*>(looper);
     iq->attachLooper(l, ident, callback, data);
 }
 

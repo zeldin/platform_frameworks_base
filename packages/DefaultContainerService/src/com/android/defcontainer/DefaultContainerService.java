@@ -30,6 +30,7 @@ import android.content.pm.PackageParser;
 import android.content.res.ObbInfo;
 import android.content.res.ObbScanner;
 import android.net.Uri;
+import android.os.Build;
 import android.os.Environment;
 import android.os.Environment.UserEnvironment;
 import android.os.FileUtils;
@@ -39,14 +40,16 @@ import android.os.Process;
 import android.os.RemoteException;
 import android.os.ServiceManager;
 import android.os.StatFs;
-import android.os.SystemClock;
 import android.provider.Settings;
+import android.system.ErrnoException;
+import android.system.Os;
+import android.system.StructStatVfs;
 import android.util.DisplayMetrics;
-import android.util.Log;
 import android.util.Slog;
 
 import com.android.internal.app.IMediaContainerService;
 import com.android.internal.content.NativeLibraryHelper;
+import com.android.internal.content.NativeLibraryHelper.ApkHandle;
 import com.android.internal.content.PackageHelper;
 
 import java.io.BufferedInputStream;
@@ -67,11 +70,8 @@ import javax.crypto.CipherInputStream;
 import javax.crypto.Mac;
 import javax.crypto.NoSuchPaddingException;
 
-import libcore.io.ErrnoException;
 import libcore.io.IoUtils;
-import libcore.io.Libcore;
 import libcore.io.Streams;
-import libcore.io.StructStatVfs;
 
 /*
  * This service copies a downloaded apk to a file passed in as
@@ -89,7 +89,7 @@ public class DefaultContainerService extends IntentService {
     private IMediaContainerService.Stub mBinder = new IMediaContainerService.Stub() {
         /**
          * Creates a new container and copies resource there.
-         * @param paackageURI the uri of resource to be copied. Can be either
+         * @param packageURI the uri of resource to be copied. Can be either
          * a content uri or a file uri
          * @param cid the id of the secure container that should
          * be used for creating a secure container into which the resource
@@ -102,13 +102,32 @@ public class DefaultContainerService extends IntentService {
          */
         public String copyResourceToContainer(final Uri packageURI, final String cid,
                 final String key, final String resFileName, final String publicResFileName,
-                boolean isExternal, boolean isForwardLocked) {
+                boolean isExternal, boolean isForwardLocked, String abiOverride) {
             if (packageURI == null || cid == null) {
                 return null;
             }
 
-            return copyResourceInner(packageURI, cid, key, resFileName, publicResFileName,
-                    isExternal, isForwardLocked);
+
+            if (isExternal) {
+                // Make sure the sdcard is mounted.
+                String status = Environment.getExternalStorageState();
+                if (!status.equals(Environment.MEDIA_MOUNTED)) {
+                    Slog.w(TAG, "Make sure sdcard is mounted.");
+                    return null;
+                }
+            }
+
+            ApkHandle handle = null;
+            try {
+                handle = ApkHandle.create(packageURI.getPath());
+                return copyResourceInner(packageURI, cid, key, resFileName, publicResFileName,
+                        isExternal, isForwardLocked, handle, abiOverride);
+            } catch (IOException ioe) {
+                Slog.w(TAG, "Problem opening APK: " + packageURI.getPath());
+                return null;
+            } finally {
+                IoUtils.closeQuietly(handle);
+            }
         }
 
         /**
@@ -146,19 +165,20 @@ public class DefaultContainerService extends IntentService {
                 Slog.e(TAG, "Could not copy URI " + packageURI.toString() + " Security: "
                                 + e.getMessage());
                 return PackageManager.INSTALL_FAILED_INVALID_APK;
+            } finally {
+                IoUtils.closeQuietly(autoOut);
             }
         }
 
         /**
          * Determine the recommended install location for package
          * specified by file uri location.
-         * @param fileUri the uri of resource to be copied. Should be a
-         * file uri
+         *
          * @return Returns PackageInfoLite object containing
          * the package info and recommended app location.
          */
         public PackageInfoLite getMinimalPackageInfo(final String packagePath, int flags,
-                long threshold) {
+                long threshold, String abiOverride) {
             PackageInfoLite ret = new PackageInfoLite();
 
             if (packagePath == null) {
@@ -190,7 +210,7 @@ public class DefaultContainerService extends IntentService {
             ret.verifiers = pkg.verifiers;
 
             ret.recommendedInstallLocation = recommendAppInstallLocation(pkg.installLocation,
-                    packagePath, flags, threshold);
+                    packagePath, flags, threshold, abiOverride);
 
             return ret;
         }
@@ -207,11 +227,11 @@ public class DefaultContainerService extends IntentService {
         }
 
         @Override
-        public boolean checkExternalFreeStorage(Uri packageUri, boolean isForwardLocked)
-                throws RemoteException {
+        public boolean checkExternalFreeStorage(Uri packageUri, boolean isForwardLocked,
+                String abiOverride) throws RemoteException {
             final File apkFile = new File(packageUri.getPath());
             try {
-                return isUnderExternalThreshold(apkFile, isForwardLocked);
+                return isUnderExternalThreshold(apkFile, isForwardLocked, abiOverride);
             } catch (IOException e) {
                 return true;
             }
@@ -244,7 +264,7 @@ public class DefaultContainerService extends IntentService {
             Process.setThreadPriority(Process.THREAD_PRIORITY_BACKGROUND);
 
             try {
-                final StructStatVfs stat = Libcore.os.statvfs(path);
+                final StructStatVfs stat = Os.statvfs(path);
                 final long totalSize = stat.f_blocks * stat.f_bsize;
                 final long availSize = stat.f_bavail * stat.f_bsize;
                 return new long[] { totalSize, availSize };
@@ -264,11 +284,11 @@ public class DefaultContainerService extends IntentService {
         }
 
         @Override
-        public long calculateInstalledSize(String packagePath, boolean isForwardLocked)
-                throws RemoteException {
+        public long calculateInstalledSize(String packagePath, boolean isForwardLocked,
+                String abiOverride) throws RemoteException {
             final File packageFile = new File(packagePath);
             try {
-                return calculateContainerSize(packageFile, isForwardLocked) * 1024 * 1024;
+                return calculateContainerSize(packageFile, isForwardLocked, abiOverride) * 1024 * 1024;
             } catch (IOException e) {
                 /*
                  * Okay, something failed, so let's just estimate it to be 2x
@@ -293,14 +313,20 @@ public class DefaultContainerService extends IntentService {
             try {
                 while ((item = pm.nextPackageToClean(item)) != null) {
                     final UserEnvironment userEnv = new UserEnvironment(item.userId);
-                    eraseFiles(userEnv.getExternalStorageAppDataDirectory(item.packageName));
-                    eraseFiles(userEnv.getExternalStorageAppMediaDirectory(item.packageName));
+                    eraseFiles(userEnv.buildExternalStorageAppDataDirs(item.packageName));
+                    eraseFiles(userEnv.buildExternalStorageAppMediaDirs(item.packageName));
                     if (item.andCode) {
-                        eraseFiles(userEnv.getExternalStorageAppObbDirectory(item.packageName));
+                        eraseFiles(userEnv.buildExternalStorageAppObbDirs(item.packageName));
                     }
                 }
             } catch (RemoteException e) {
             }
+        }
+    }
+
+    void eraseFiles(File[] paths) {
+        for (File path : paths) {
+            eraseFiles(path);
         }
     }
 
@@ -321,25 +347,33 @@ public class DefaultContainerService extends IntentService {
     }
 
     private String copyResourceInner(Uri packageURI, String newCid, String key, String resFileName,
-            String publicResFileName, boolean isExternal, boolean isForwardLocked) {
-
-        if (isExternal) {
-            // Make sure the sdcard is mounted.
-            String status = Environment.getExternalStorageState();
-            if (!status.equals(Environment.MEDIA_MOUNTED)) {
-                Slog.w(TAG, "Make sure sdcard is mounted.");
-                return null;
-            }
-        }
-
+            String publicResFileName, boolean isExternal, boolean isForwardLocked,
+            ApkHandle handle, String abiOverride) {
         // The .apk file
         String codePath = packageURI.getPath();
         File codeFile = new File(codePath);
 
+        String[] abiList = Build.SUPPORTED_ABIS;
+        if (abiOverride != null) {
+            abiList = new String[] { abiOverride };
+        } else {
+            try {
+                if (Build.SUPPORTED_64_BIT_ABIS.length > 0 &&
+                        NativeLibraryHelper.hasRenderscriptBitcode(handle)) {
+                    abiList = Build.SUPPORTED_32_BIT_ABIS;
+                }
+            } catch (IOException ioe) {
+                Slog.w(TAG, "Problem determining ABI for: " + codeFile.getPath());
+                return null;
+            }
+        }
+
+        final int abi = NativeLibraryHelper.findSupportedAbi(handle, abiList);
+
         // Calculate size of container needed to hold base APK.
         final int sizeMb;
         try {
-            sizeMb = calculateContainerSize(codeFile, isForwardLocked);
+            sizeMb = calculateContainerSize(handle, codeFile, abi, isForwardLocked);
         } catch (IOException e) {
             Slog.w(TAG, "Problem when trying to copy " + codeFile.getPath());
             return null;
@@ -370,7 +404,7 @@ public class DefaultContainerService extends IntentService {
         }
 
         try {
-            Libcore.os.chmod(resFile.getAbsolutePath(), 0640);
+            Os.chmod(resFile.getAbsolutePath(), 0640);
         } catch (ErrnoException e) {
             Slog.e(TAG, "Could not chown APK: " + e.getMessage());
             PackageHelper.destroySdDir(newCid);
@@ -392,7 +426,7 @@ public class DefaultContainerService extends IntentService {
             }
 
             try {
-                Libcore.os.chmod(publicZipFile.getAbsolutePath(), 0644);
+                Os.chmod(publicZipFile.getAbsolutePath(), 0644);
             } catch (ErrnoException e) {
                 Slog.e(TAG, "Could not chown public resource file: " + e.getMessage());
                 PackageHelper.destroySdDir(newCid);
@@ -402,7 +436,14 @@ public class DefaultContainerService extends IntentService {
 
         final File sharedLibraryDir = new File(newCachePath, LIB_DIR_NAME);
         if (sharedLibraryDir.mkdir()) {
-            int ret = NativeLibraryHelper.copyNativeBinariesIfNeededLI(codeFile, sharedLibraryDir);
+            int ret = PackageManager.INSTALL_SUCCEEDED;
+            if (abi >= 0) {
+                ret = NativeLibraryHelper.copyNativeBinariesIfNeededLI(handle,
+                        sharedLibraryDir, abiList[abi]);
+            } else if (abi != PackageManager.NO_NATIVE_LIBRARIES) {
+                ret = abi;
+            }
+
             if (ret != PackageManager.INSTALL_SUCCEEDED) {
                 Slog.e(TAG, "Could not copy native libraries to " + sharedLibraryDir.getPath());
                 PackageHelper.destroySdDir(newCid);
@@ -656,7 +697,7 @@ public class DefaultContainerService extends IntentService {
     private static final int PREFER_EXTERNAL = 2;
 
     private int recommendAppInstallLocation(int installLocation, String archiveFilePath, int flags,
-            long threshold) {
+            long threshold, String abiOverride) {
         int prefer;
         boolean checkBoth = false;
 
@@ -725,7 +766,7 @@ public class DefaultContainerService extends IntentService {
         boolean fitsOnSd = false;
         if (!emulated && (checkBoth || prefer == PREFER_EXTERNAL)) {
             try {
-                fitsOnSd = isUnderExternalThreshold(apkFile, isForwardLocked);
+                fitsOnSd = isUnderExternalThreshold(apkFile, isForwardLocked, abiOverride);
             } catch (IOException e) {
                 return PackageHelper.RECOMMEND_FAILED_INVALID_URI;
             }
@@ -796,13 +837,13 @@ public class DefaultContainerService extends IntentService {
      * @return true if file fits
      * @throws IOException when file does not exist
      */
-    private boolean isUnderExternalThreshold(File apkFile, boolean isForwardLocked)
+    private boolean isUnderExternalThreshold(File apkFile, boolean isForwardLocked, String abiOverride)
             throws IOException {
         if (Environment.isExternalStorageEmulated()) {
             return false;
         }
 
-        final int sizeMb = calculateContainerSize(apkFile, isForwardLocked);
+        final int sizeMb = calculateContainerSize(apkFile, isForwardLocked, abiOverride);
 
         final int availSdMb;
         if (Environment.MEDIA_MOUNTED.equals(Environment.getExternalStorageState())) {
@@ -816,6 +857,19 @@ public class DefaultContainerService extends IntentService {
         return availSdMb > sizeMb;
     }
 
+    private int calculateContainerSize(File apkFile, boolean forwardLocked,
+            String abiOverride) throws IOException {
+        ApkHandle handle = null;
+        try {
+            handle = ApkHandle.create(apkFile);
+            final int abi = NativeLibraryHelper.findSupportedAbi(handle,
+                    (abiOverride != null) ? new String[] { abiOverride } : Build.SUPPORTED_ABIS);
+            return calculateContainerSize(handle, apkFile, abi, forwardLocked);
+        } finally {
+            IoUtils.closeQuietly(handle);
+        }
+    }
+
     /**
      * Calculate the container size for an APK. Takes into account the
      * 
@@ -823,7 +877,8 @@ public class DefaultContainerService extends IntentService {
      * @return size in megabytes (2^20 bytes)
      * @throws IOException when there is a problem reading the file
      */
-    private int calculateContainerSize(File apkFile, boolean forwardLocked) throws IOException {
+    private int calculateContainerSize(NativeLibraryHelper.ApkHandle apkHandle,
+            File apkFile, int abiIndex, boolean forwardLocked) throws IOException {
         // Calculate size of container needed to hold base APK.
         long sizeBytes = apkFile.length();
         if (sizeBytes == 0 && !apkFile.exists()) {
@@ -832,7 +887,10 @@ public class DefaultContainerService extends IntentService {
 
         // Check all the native files that need to be copied and add that to the
         // container size.
-        sizeBytes += NativeLibraryHelper.sumNativeBinariesLI(apkFile);
+        if (abiIndex >= 0) {
+            sizeBytes += NativeLibraryHelper.sumNativeBinariesLI(apkHandle,
+                    Build.SUPPORTED_ABIS[abiIndex]);
+        }
 
         if (forwardLocked) {
             sizeBytes += PackageHelper.extractPublicFiles(apkFile.getPath(), null);

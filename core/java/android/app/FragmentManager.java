@@ -31,11 +31,13 @@ import android.util.DebugUtils;
 import android.util.Log;
 import android.util.LogWriter;
 import android.util.SparseArray;
+import android.util.SuperNotCalledException;
 import android.view.Menu;
 import android.view.MenuInflater;
 import android.view.MenuItem;
 import android.view.View;
 import android.view.ViewGroup;
+import com.android.internal.util.FastPrintWriter;
 
 import java.io.FileDescriptor;
 import java.io.PrintWriter;
@@ -65,7 +67,7 @@ public abstract class FragmentManager {
      * with {@link FragmentTransaction#addToBackStack(String)
      * FragmentTransaction.addToBackStack()}.  Entries can later be
      * retrieved with {@link FragmentManager#getBackStackEntryAt(int)
-     * FragmentManager.getBackStackEntry()}.
+     * FragmentManager.getBackStackEntryAt()}.
      *
      * <p>Note that you should never hold on to a BackStackEntry object;
      * the identifier as returned by {@link #getId} is the only thing that
@@ -255,7 +257,7 @@ public abstract class FragmentManager {
 
     /**
      * Return the BackStackEntry at index <var>index</var> in the back stack;
-     * entries start index 0 being the bottom of the stack.
+     * where the item on the bottom of the stack has index 0.
      */
     public abstract BackStackEntry getBackStackEntryAt(int index);
 
@@ -445,12 +447,13 @@ final class FragmentManagerImpl extends FragmentManager {
     private void throwException(RuntimeException ex) {
         Log.e(TAG, ex.getMessage());
         LogWriter logw = new LogWriter(Log.ERROR, TAG);
-        PrintWriter pw = new PrintWriter(logw);
+        PrintWriter pw = new FastPrintWriter(logw, false, 1024);
         if (mActivity != null) {
             Log.e(TAG, "Activity state:");
             try {
                 mActivity.dump("  ", null, pw, new String[] { });
             } catch (Exception e) {
+                pw.flush();
                 Log.e(TAG, "Failed dumping state", e);
             }
         } else {
@@ -458,9 +461,11 @@ final class FragmentManagerImpl extends FragmentManager {
             try {
                 dump("  ", null, pw, new String[] { });
             } catch (Exception e) {
+                pw.flush();
                 Log.e(TAG, "Failed dumping state", e);
             }
         }
+        pw.flush();
         throw ex;
     }
 
@@ -569,12 +574,12 @@ final class FragmentManagerImpl extends FragmentManager {
             return null;
         }
         if (index >= mActive.size()) {
-            throwException(new IllegalStateException("Fragement no longer exists for key "
+            throwException(new IllegalStateException("Fragment no longer exists for key "
                     + key + ": index " + index));
         }
         Fragment f = mActive.get(index);
         if (f == null) {
-            throwException(new IllegalStateException("Fragement no longer exists for key "
+            throwException(new IllegalStateException("Fragment no longer exists for key "
                     + key + ": index " + index));
         }
         return f;
@@ -1324,12 +1329,19 @@ final class FragmentManagerImpl extends FragmentManager {
         }
     }
 
+    /**
+     * Adds an action to the queue of pending actions.
+     *
+     * @param action the action to add
+     * @param allowStateLoss whether to allow loss of state information
+     * @throws IllegalStateException if the activity has been destroyed
+     */
     public void enqueueAction(Runnable action, boolean allowStateLoss) {
         if (!allowStateLoss) {
             checkStateLoss();
         }
         synchronized (this) {
-            if (mActivity == null) {
+            if (mDestroyed || mActivity == null) {
                 throw new IllegalStateException("Activity has been destroyed");
             }
             if (mPendingActions == null) {
@@ -1806,8 +1818,9 @@ final class FragmentManagerImpl extends FragmentManager {
                     Log.v(TAG, "restoreAllState: back stack #" + i
                         + " (index " + bse.mIndex + "): " + bse);
                     LogWriter logw = new LogWriter(Log.VERBOSE, TAG);
-                    PrintWriter pw = new PrintWriter(logw);
+                    PrintWriter pw = new FastPrintWriter(logw, false, 1024);
                     bse.dump("  ", pw, false);
+                    pw.flush();
                 }
                 mBackStack.add(bse);
                 if (bse.mIndex >= 0) {

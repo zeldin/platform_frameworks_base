@@ -18,6 +18,8 @@
 #include <unistd.h>
 #include <stdio.h>
 #include <fcntl.h>
+#include <stdlib.h>
+#include <string.h>
 
 #include <linux/fb.h>
 #include <sys/ioctl.h>
@@ -55,12 +57,8 @@ static void usage(const char* pname)
 static SkBitmap::Config flinger2skia(PixelFormat f)
 {
     switch (f) {
-        case PIXEL_FORMAT_A_8:
-            return SkBitmap::kA8_Config;
         case PIXEL_FORMAT_RGB_565:
             return SkBitmap::kRGB_565_Config;
-        case PIXEL_FORMAT_RGBA_4444:
-            return SkBitmap::kARGB_4444_Config;
         default:
             return SkBitmap::kARGB_8888_Config;
     }
@@ -86,6 +84,21 @@ static status_t vinfoToPixelFormat(const fb_var_screeninfo& vinfo,
             break;
         default:
             return BAD_VALUE;
+    }
+    return NO_ERROR;
+}
+
+static status_t notifyMediaScanner(const char* fileName) {
+    String8 cmd("am broadcast -a android.intent.action.MEDIA_SCANNER_SCAN_FILE -d file://");
+    String8 fileUrl("\"");
+    fileUrl.append(fileName);
+    fileUrl.append("\"");
+    cmd.append(fileName);
+    cmd.append(" > /dev/null");
+    int result = system(cmd.string());
+    if (result < 0) {
+        fprintf(stderr, "Unable to broadcast intent for media scanner.\n");
+        return UNKNOWN_ERROR;
     }
     return NO_ERROR;
 }
@@ -116,10 +129,11 @@ int main(int argc, char** argv)
     argv += optind;
 
     int fd = -1;
+    const char* fn;
     if (argc == 0) {
         fd = dup(STDOUT_FILENO);
     } else if (argc == 1) {
-        const char* fn = argv[0];
+        fn = argv[0];
         fd = open(fn, O_WRONLY | O_CREAT | O_TRUNC, 0664);
         if (fd == -1) {
             fprintf(stderr, "Error opening file: %s (%s)\n", fn, strerror(errno));
@@ -187,6 +201,7 @@ int main(int argc, char** argv)
             SkData* streamData = stream.copyToData();
             write(fd, streamData->data(), streamData->size());
             streamData->unref();
+            notifyMediaScanner(fn);
         } else {
             write(fd, &w, 4);
             write(fd, &h, 4);

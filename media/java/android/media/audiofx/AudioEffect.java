@@ -120,6 +120,12 @@ public class AudioEffect {
             .fromString("58b4b260-8e06-11e0-aa8e-0002a5d5c51b");
 
     /**
+     * UUID for Loudness Enhancer
+     */
+    public static final UUID EFFECT_TYPE_LOUDNESS_ENHANCER = UUID
+              .fromString("fe3199be-aed0-413f-87bb-11260eb63cf1");
+
+    /**
      * Null effect UUID. Used when the UUID for effect type of
      * @hide
      */
@@ -309,8 +315,8 @@ public class AudioEffect {
     private int mId;
 
     // accessed by native methods
-    private int mNativeAudioEffect;
-    private int mJniData;
+    private long mNativeAudioEffect;
+    private long mJniData;
 
     /**
      * Effect descriptor

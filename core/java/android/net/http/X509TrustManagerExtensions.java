@@ -22,14 +22,17 @@ import java.security.cert.CertificateException;
 import java.security.cert.X509Certificate;
 import java.util.List;
 
+import javax.net.ssl.SSLParameters;
+import javax.net.ssl.SSLSocket;
 import javax.net.ssl.X509TrustManager;
 
 /**
  * X509TrustManager wrapper exposing Android-added features.
- *
- * <p> The checkServerTrusted method allows callers to perform additional
- * verification of certificate chains after they have been successfully
- * verified by the platform.</p>
+ * <p>
+ * The checkServerTrusted method allows callers to perform additional
+ * verification of certificate chains after they have been successfully verified
+ * by the platform.
+ * </p>
  */
 public class X509TrustManagerExtensions {
 
@@ -45,7 +48,8 @@ public class X509TrustManagerExtensions {
         if (tm instanceof TrustManagerImpl) {
             mDelegate = (TrustManagerImpl) tm;
         } else {
-            throw new IllegalArgumentException("tm is not a supported type of X509TrustManager");
+            throw new IllegalArgumentException("tm is an instance of " + tm.getClass().getName() +
+                    " which is not a supported type of X509TrustManager");
         }
     }
 

@@ -16,8 +16,6 @@
 
 package android.content.res;
 
-import android.os.Trace;
-import android.view.View;
 import com.android.internal.util.XmlUtils;
 
 import org.xmlpull.v1.XmlPullParser;
@@ -30,12 +28,15 @@ import android.graphics.drawable.ColorDrawable;
 import android.graphics.drawable.Drawable.ConstantState;
 import android.os.Build;
 import android.os.Bundle;
+import android.os.IBinder;
+import android.os.Trace;
 import android.util.AttributeSet;
 import android.util.DisplayMetrics;
 import android.util.Log;
 import android.util.Slog;
 import android.util.TypedValue;
 import android.util.LongSparseArray;
+import android.view.DisplayAdjustments;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -100,11 +101,11 @@ public class Resources {
     /*package*/ final Configuration mTmpConfig = new Configuration();
     /*package*/ TypedValue mTmpValue = new TypedValue();
     /*package*/ final LongSparseArray<WeakReference<Drawable.ConstantState> > mDrawableCache
-            = new LongSparseArray<WeakReference<Drawable.ConstantState> >();
+            = new LongSparseArray<WeakReference<Drawable.ConstantState> >(0);
     /*package*/ final LongSparseArray<WeakReference<ColorStateList> > mColorStateListCache
-            = new LongSparseArray<WeakReference<ColorStateList> >();
+            = new LongSparseArray<WeakReference<ColorStateList> >(0);
     /*package*/ final LongSparseArray<WeakReference<Drawable.ConstantState> > mColorDrawableCache
-            = new LongSparseArray<WeakReference<Drawable.ConstantState> >();
+            = new LongSparseArray<WeakReference<Drawable.ConstantState> >(0);
     /*package*/ boolean mPreloading;
 
     /*package*/ TypedArray mCachedStyledAttributes = null;
@@ -118,8 +119,9 @@ public class Resources {
     private final Configuration mConfiguration = new Configuration();
     /*package*/ final DisplayMetrics mMetrics = new DisplayMetrics();
     private NativePluralRules mPluralRule;
-    
-    private CompatibilityInfo mCompatibilityInfo;
+
+    private CompatibilityInfo mCompatibilityInfo = CompatibilityInfo.DEFAULT_COMPATIBILITY_INFO;
+    private WeakReference<IBinder> mToken;
 
     static {
         sPreloadedDrawables = new LongSparseArray[2];
@@ -174,7 +176,7 @@ public class Resources {
      *               selecting/computing resource values (optional).
      */
     public Resources(AssetManager assets, DisplayMetrics metrics, Configuration config) {
-        this(assets, metrics, config, null);
+        this(assets, metrics, config, CompatibilityInfo.DEFAULT_COMPATIBILITY_INFO, null);
     }
 
     /**
@@ -185,15 +187,18 @@ public class Resources {
      *                selecting/computing resource values.
      * @param config Desired device configuration to consider when 
      *               selecting/computing resource values (optional).
-     * @param compInfo this resource's compatibility info. It will use the default compatibility
-     *  info when it's null.
+     * @param compatInfo this resource's compatibility info. Must not be null.
+     * @param token The Activity token for determining stack affiliation. Usually null.
      * @hide
      */
-    public Resources(AssetManager assets, DisplayMetrics metrics,
-            Configuration config, CompatibilityInfo compInfo) {
+    public Resources(AssetManager assets, DisplayMetrics metrics, Configuration config,
+            CompatibilityInfo compatInfo, IBinder token) {
         mAssets = assets;
         mMetrics.setToDefaults();
-        mCompatibilityInfo = compInfo;
+        if (compatInfo != null) {
+            mCompatibilityInfo = compatInfo;
+        }
+        mToken = new WeakReference<IBinder>(token);
         updateConfiguration(config, metrics);
         assets.ensureStringBlocks();
     }
@@ -1455,7 +1460,7 @@ public class Resources {
         }
 
         private final AssetManager mAssets;
-        private final int mTheme;
+        private final long mTheme;
     }
 
     /**
@@ -1533,9 +1538,8 @@ public class Resources {
             // it would be cleaner and more maintainble to just be
             // consistently dealing with a compatible display everywhere in
             // the framework.
-            if (mCompatibilityInfo != null) {
-                mCompatibilityInfo.applyToDisplayMetrics(mMetrics);
-            }
+            mCompatibilityInfo.applyToDisplayMetrics(mMetrics);
+
             int configChanges = 0xfffffff;
             if (config != null) {
                 mTmpConfig.setTo(config);
@@ -1543,9 +1547,9 @@ public class Resources {
                 if (density == Configuration.DENSITY_DPI_UNDEFINED) {
                     density = mMetrics.noncompatDensityDpi;
                 }
-                if (mCompatibilityInfo != null) {
-                    mCompatibilityInfo.applyToConfiguration(density, mTmpConfig);
-                }
+
+                mCompatibilityInfo.applyToConfiguration(density, mTmpConfig);
+
                 if (mTmpConfig.locale == null) {
                     mTmpConfig.locale = Locale.getDefault();
                     mTmpConfig.setLayoutDirection(mTmpConfig.locale);
@@ -1565,10 +1569,7 @@ public class Resources {
 
             String locale = null;
             if (mConfiguration.locale != null) {
-                locale = mConfiguration.locale.getLanguage();
-                if (mConfiguration.locale.getCountry() != null) {
-                    locale += "-" + mConfiguration.locale.getCountry();
-                }
+                locale = adjustLanguageTag(localeToLanguageTag(mConfiguration.locale));
             }
             int width, height;
             if (mMetrics.widthPixels >= mMetrics.heightPixels) {
@@ -1649,6 +1650,39 @@ public class Resources {
         }
     }
 
+    // Locale.toLanguageTag() is not available in Java6. LayoutLib overrides
+    // this method to enable users to use Java6.
+    private String localeToLanguageTag(Locale locale) {
+        return locale.toLanguageTag();
+    }
+
+    /**
+     * {@code Locale.toLanguageTag} will transform the obsolete (and deprecated)
+     * language codes "in", "ji" and "iw" to "id", "yi" and "he" respectively.
+     *
+     * All released versions of android prior to "L" used the deprecated language
+     * tags, so we will need to support them for backwards compatibility.
+     *
+     * Note that this conversion needs to take place *after* the call to
+     * {@code toLanguageTag} because that will convert all the deprecated codes to
+     * the new ones, even if they're set manually.
+     */
+    private static String adjustLanguageTag(String languageTag) {
+        final int separator = languageTag.indexOf('-');
+        final String language;
+        final String remainder;
+
+        if (separator == -1) {
+            language = languageTag;
+            remainder = "";
+        } else {
+            language = languageTag.substring(0, separator);
+            remainder = languageTag.substring(separator);
+        }
+
+        return Locale.adjustLanguageCode(language) + remainder;
+    }
+
     /**
      * Update the system resources configuration if they have previously
      * been initialized.
@@ -1664,13 +1698,6 @@ public class Resources {
         }
     }
 
-    /**
-     * @hide
-     */
-    public static void updateSystemConfiguration(Configuration config, DisplayMetrics metrics) {
-        updateSystemConfiguration(config, metrics, null);
-    }
-    
     /**
      * Return the current display metrics that are in effect for this resource 
      * object.  The returned object should be treated as read-only.
@@ -1701,8 +1728,7 @@ public class Resources {
      * @hide
      */
     public CompatibilityInfo getCompatibilityInfo() {
-        return mCompatibilityInfo != null ? mCompatibilityInfo
-                : CompatibilityInfo.DEFAULT_COMPATIBILITY_INFO;
+        return mCompatibilityInfo;
     }
 
     /**
@@ -1710,8 +1736,10 @@ public class Resources {
      * @hide
      */
     public void setCompatibilityInfo(CompatibilityInfo ci) {
-        mCompatibilityInfo = ci;
-        updateConfiguration(mConfiguration, mMetrics);
+        if (ci != null) {
+            mCompatibilityInfo = ci;
+            updateConfiguration(mConfiguration, mMetrics);
+        }
     }
     
     /**
@@ -1983,6 +2011,13 @@ public class Resources {
             mPreloading = false;
             flushLayoutCache();
         }
+    }
+
+    /**
+     * @hide
+     */
+    public LongSparseArray<Drawable.ConstantState> getPreloadedDrawables() {
+        return sPreloadedDrawables[0];
     }
 
     private boolean verifyPreloadConfig(int changingConfigurations, int allowVarying,
@@ -2404,6 +2439,5 @@ public class Resources {
         mMetrics.setToDefaults();
         updateConfiguration(null, null);
         mAssets.ensureStringBlocks();
-        mCompatibilityInfo = CompatibilityInfo.DEFAULT_COMPATIBILITY_INFO;
     }
 }

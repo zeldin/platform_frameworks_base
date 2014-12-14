@@ -1,10 +1,19 @@
 LOCAL_PATH:= $(call my-dir)
+
 include $(CLEAR_VARS)
 
+# TODO: Trying to link libsigchain as a static library prevents
+# static linker from exporting necessary symbols. So as a workaround
+# we use sigchain.o
 LOCAL_SRC_FILES:= \
-	app_main.cpp
+	app_main.cpp \
+	sigchain_proxy.cpp
+
+LOCAL_LDFLAGS := -Wl,--version-script,art/sigchainlib/version-script.txt -Wl,--export-dynamic
+LOCAL_CPPFLAGS := -std=c++11 -Iart
 
 LOCAL_SHARED_LIBRARIES := \
+	libdl \
 	libcutils \
 	libutils \
 	liblog \
@@ -12,9 +21,14 @@ LOCAL_SHARED_LIBRARIES := \
 	libandroid_runtime
 
 LOCAL_MODULE:= app_process
-
+LOCAL_MULTILIB := both
+LOCAL_MODULE_STEM_32 := app_process32
+LOCAL_MODULE_STEM_64 := app_process64
 include $(BUILD_EXECUTABLE)
 
+# Create a symlink from app_process to app_process32 or 64
+# depending on the target configuration.
+include  $(BUILD_SYSTEM)/executable_prefer_symlink.mk
 
 # Build a variant of app_process binary linked with ASan runtime.
 # ARM-only at the moment.
@@ -22,8 +36,10 @@ ifeq ($(TARGET_ARCH),arm)
 
 include $(CLEAR_VARS)
 
+# see comment above (~l5)
 LOCAL_SRC_FILES:= \
-	app_main.cpp
+	app_main.cpp \
+	sigchain_proxy.cpp
 
 LOCAL_SHARED_LIBRARIES := \
 	libcutils \
@@ -31,6 +47,9 @@ LOCAL_SHARED_LIBRARIES := \
 	liblog \
 	libbinder \
 	libandroid_runtime
+
+LOCAL_LDFLAGS := -ldl -Wl,--version-script,art/sigchainlib/version-script.txt -Wl,--export-dynamic
+LOCAL_CPPFLAGS := -std=c++11 -Iart
 
 LOCAL_MODULE := app_process__asan
 LOCAL_MODULE_TAGS := eng
