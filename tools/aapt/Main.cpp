@@ -212,7 +212,9 @@ void usage(void)
         "       specified folder.\n"
         "   --ignore-assets\n"
         "       Assets to be ignored. Default pattern is:\n"
-        "       %s\n",
+        "       %s\n"
+        "   --no-version-vectors\n"
+        "       Do not automatically generate versioned copies of vector XML resources.\n",
         gDefaultIgnoreAssets);
 }
 
@@ -674,6 +676,8 @@ int main(int argc, char* const argv[])
                     gUserIgnoreAssets = argv[0];
                 } else if (strcmp(cp, "-pseudo-localize") == 0) {
                     bundle.setPseudolocalize(PSEUDO_ACCENTED | PSEUDO_BIDI);
+                } else if (strcmp(cp, "-no-version-vectors") == 0) {
+                    bundle.setNoVersionVectors(true);
                 } else {
                     fprintf(stderr, "ERROR: Unknown option '-%s'\n", cp);
                     wantUsage = true;
