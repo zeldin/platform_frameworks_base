@@ -69,7 +69,11 @@ public class OverScroller {
      * @hide
      */
     public OverScroller(Context context, Interpolator interpolator, boolean flywheel) {
-        mInterpolator = interpolator;
+        if (interpolator == null) {
+            mInterpolator = new Scroller.ViscousFluidInterpolator();
+        } else {
+            mInterpolator = interpolator;
+        }
         mFlywheel = flywheel;
         mScrollerX = new SplineOverScroller(context);
         mScrollerY = new SplineOverScroller(context);
@@ -111,7 +115,11 @@ public class OverScroller {
     }
 
     void setInterpolator(Interpolator interpolator) {
-        mInterpolator = interpolator;
+        if (interpolator == null) {
+            mInterpolator = new Scroller.ViscousFluidInterpolator();
+        } else {
+            mInterpolator = interpolator;
+        }
     }
 
     /**
@@ -299,14 +307,7 @@ public class OverScroller {
 
                 final int duration = mScrollerX.mDuration;
                 if (elapsedTime < duration) {
-                    float q = (float) (elapsedTime) / duration;
-
-                    if (mInterpolator == null) {
-                        q = Scroller.viscousFluid(q);
-                    } else {
-                        q = mInterpolator.getInterpolation(q);
-                    }
-
+                    final float q = mInterpolator.getInterpolation(elapsedTime / (float) duration);
                     mScrollerX.updateScroll(q);
                     mScrollerY.updateScroll(q);
                 } else {
@@ -900,6 +901,10 @@ public class OverScroller {
             final long time = AnimationUtils.currentAnimationTimeMillis();
             final long currentTime = time - mStartTime;
 
+            if (currentTime == 0) {
+                // Skip work but report that we're still going if we have a nonzero duration.
+                return mDuration > 0;
+            }
             if (currentTime > mDuration) {
                 return false;
             }

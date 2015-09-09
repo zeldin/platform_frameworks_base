@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+#define LOG_NDEBUG 0
 #define LOG_TAG "BootAnimation"
 
 #include <stdint.h>
@@ -22,6 +23,7 @@
 #include <fcntl.h>
 #include <utils/misc.h>
 #include <signal.h>
+#include <time.h>
 
 #include <cutils/properties.h>
 
@@ -30,35 +32,35 @@
 #include <utils/Atomic.h>
 #include <utils/Errors.h>
 #include <utils/Log.h>
-#include <utils/threads.h>
 
 #include <ui/PixelFormat.h>
 #include <ui/Rect.h>
 #include <ui/Region.h>
 #include <ui/DisplayInfo.h>
-#include <ui/FramebufferNativeWindow.h>
 
 #include <gui/ISurfaceComposer.h>
 #include <gui/Surface.h>
 #include <gui/SurfaceComposerClient.h>
 
-#include <core/SkBitmap.h>
-#include <core/SkStream.h>
-#include <core/SkImageDecoder.h>
+// TODO: Fix Skia.
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wunused-parameter"
+#include <SkBitmap.h>
+#include <SkStream.h>
+#include <SkImageDecoder.h>
+#pragma GCC diagnostic pop
 
 #include <GLES/gl.h>
 #include <GLES/glext.h>
 #include <EGL/eglext.h>
 
 #include "BootAnimation.h"
+#include "AudioPlayer.h"
 
+#define OEM_BOOTANIMATION_FILE "/oem/media/bootanimation.zip"
 #define SYSTEM_BOOTANIMATION_FILE "/system/media/bootanimation.zip"
 #define SYSTEM_ENCRYPTED_BOOTANIMATION_FILE "/system/media/bootanimation-encrypted.zip"
 #define EXIT_PROP_NAME "service.bootanim.exit"
-
-extern "C" int clock_nanosleep(clockid_t clock_id, int flags,
-                           const struct timespec *request,
-                           struct timespec *remain);
 
 namespace android {
 
@@ -99,16 +101,19 @@ void BootAnimation::binderDied(const wp<IBinder>&)
     // might be blocked on a condition variable that will never be updated.
     kill( getpid(), SIGKILL );
     requestExit();
+    if (mAudioPlayer != NULL) {
+        mAudioPlayer->requestExit();
+    }
 }
 
 status_t BootAnimation::initTexture(Texture* texture, AssetManager& assets,
         const char* name) {
     Asset* asset = assets.open(name, Asset::ACCESS_BUFFER);
-    if (!asset)
+    if (asset == NULL)
         return NO_INIT;
     SkBitmap bitmap;
     SkImageDecoder::DecodeMemory(asset->getBuffer(false), asset->getLength(),
-            &bitmap, SkBitmap::kNo_Config, SkImageDecoder::kDecodePixels_Mode);
+            &bitmap, kUnknown_SkColorType, SkImageDecoder::kDecodePixels_Mode);
     asset->close();
     delete asset;
 
@@ -127,20 +132,20 @@ status_t BootAnimation::initTexture(Texture* texture, AssetManager& assets,
     glGenTextures(1, &texture->name);
     glBindTexture(GL_TEXTURE_2D, texture->name);
 
-    switch (bitmap.getConfig()) {
-        case SkBitmap::kA8_Config:
+    switch (bitmap.colorType()) {
+        case kAlpha_8_SkColorType:
             glTexImage2D(GL_TEXTURE_2D, 0, GL_ALPHA, w, h, 0, GL_ALPHA,
                     GL_UNSIGNED_BYTE, p);
             break;
-        case SkBitmap::kARGB_4444_Config:
+        case kARGB_4444_SkColorType:
             glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, w, h, 0, GL_RGBA,
                     GL_UNSIGNED_SHORT_4_4_4_4, p);
             break;
-        case SkBitmap::kARGB_8888_Config:
+        case kN32_SkColorType:
             glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, w, h, 0, GL_RGBA,
                     GL_UNSIGNED_BYTE, p);
             break;
-        case SkBitmap::kRGB_565_Config:
+        case kRGB_565_SkColorType:
             glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, w, h, 0, GL_RGB,
                     GL_UNSIGNED_SHORT_5_6_5, p);
             break;
@@ -163,10 +168,10 @@ status_t BootAnimation::initTexture(const Animation::Frame& frame)
     SkBitmap bitmap;
     SkMemoryStream  stream(frame.map->getDataPtr(), frame.map->getDataLength());
     SkImageDecoder* codec = SkImageDecoder::Factory(&stream);
-    if (codec) {
+    if (codec != NULL) {
         codec->setDitherImage(false);
         codec->decode(&stream, &bitmap,
-                SkBitmap::kARGB_8888_Config,
+                kN32_SkColorType,
                 SkImageDecoder::kDecodePixels_Mode);
         delete codec;
     }
@@ -174,7 +179,7 @@ status_t BootAnimation::initTexture(const Animation::Frame& frame)
     // FileMap memory is never released until application exit.
     // Release it now as the texture is already loaded and the memory used for
     // the packed resource can be released.
-    frame.map->release();
+    delete frame.map;
 
     // ensure we can call getPixels(). No need to call unlock, since the
     // bitmap will go out of scope when we return from this method.
@@ -190,8 +195,8 @@ status_t BootAnimation::initTexture(const Animation::Frame& frame)
     if (tw < w) tw <<= 1;
     if (th < h) th <<= 1;
 
-    switch (bitmap.getConfig()) {
-        case SkBitmap::kARGB_8888_Config:
+    switch (bitmap.colorType()) {
+        case kN32_SkColorType:
             if (tw != w || th != h) {
                 glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, tw, th, 0, GL_RGBA,
                         GL_UNSIGNED_BYTE, 0);
@@ -203,7 +208,7 @@ status_t BootAnimation::initTexture(const Animation::Frame& frame)
             }
             break;
 
-        case SkBitmap::kRGB_565_Config:
+        case kRGB_565_SkColorType:
             if (tw != w || th != h) {
                 glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, tw, th, 0, GL_RGB,
                         GL_UNSIGNED_SHORT_5_6_5, 0);
@@ -251,7 +256,7 @@ status_t BootAnimation::readyToRun() {
             EGL_DEPTH_SIZE, 0,
             EGL_NONE
     };
-    EGLint w, h, dummy;
+    EGLint w, h;
     EGLint numConfigs;
     EGLConfig config;
     EGLSurface surface;
@@ -288,6 +293,9 @@ status_t BootAnimation::readyToRun() {
     if ((encryptedAnimation &&
             (access(SYSTEM_ENCRYPTED_BOOTANIMATION_FILE, R_OK) == 0) &&
             ((zipFile = ZipFileRO::open(SYSTEM_ENCRYPTED_BOOTANIMATION_FILE)) != NULL)) ||
+
+            ((access(OEM_BOOTANIMATION_FILE, R_OK) == 0) &&
+            ((zipFile = ZipFileRO::open(OEM_BOOTANIMATION_FILE)) != NULL)) ||
 
             ((access(SYSTEM_BOOTANIMATION_FILE, R_OK) == 0) &&
             ((zipFile = ZipFileRO::open(SYSTEM_BOOTANIMATION_FILE)) != NULL))) {
@@ -391,53 +399,109 @@ void BootAnimation::checkExit() {
     int exitnow = atoi(value);
     if (exitnow) {
         requestExit();
+        if (mAudioPlayer != NULL) {
+            mAudioPlayer->requestExit();
+        }
     }
+}
+
+// Parse a color represented as an HTML-style 'RRGGBB' string: each pair of
+// characters in str is a hex number in [0, 255], which are converted to
+// floating point values in the range [0.0, 1.0] and placed in the
+// corresponding elements of color.
+//
+// If the input string isn't valid, parseColor returns false and color is
+// left unchanged.
+static bool parseColor(const char str[7], float color[3]) {
+    float tmpColor[3];
+    for (int i = 0; i < 3; i++) {
+        int val = 0;
+        for (int j = 0; j < 2; j++) {
+            val *= 16;
+            char c = str[2*i + j];
+            if      (c >= '0' && c <= '9') val += c - '0';
+            else if (c >= 'A' && c <= 'F') val += (c - 'A') + 10;
+            else if (c >= 'a' && c <= 'f') val += (c - 'a') + 10;
+            else                           return false;
+        }
+        tmpColor[i] = static_cast<float>(val) / 255.0f;
+    }
+    memcpy(color, tmpColor, sizeof(tmpColor));
+    return true;
+}
+
+bool BootAnimation::readFile(const char* name, String8& outString)
+{
+    ZipEntryRO entry = mZip->findEntryByName(name);
+    ALOGE_IF(!entry, "couldn't find %s", name);
+    if (!entry) {
+        return false;
+    }
+
+    FileMap* entryMap = mZip->createEntryFileMap(entry);
+    mZip->releaseEntry(entry);
+    ALOGE_IF(!entryMap, "entryMap is null");
+    if (!entryMap) {
+        return false;
+    }
+
+    outString.setTo((char const*)entryMap->getDataPtr(), entryMap->getDataLength());
+    delete entryMap;
+    return true;
 }
 
 bool BootAnimation::movie()
 {
-    ZipEntryRO desc = mZip->findEntryByName("desc.txt");
-    ALOGE_IF(!desc, "couldn't find desc.txt");
-    if (!desc) {
+    String8 desString;
+
+    if (!readFile("desc.txt", desString)) {
         return false;
     }
-
-    FileMap* descMap = mZip->createEntryFileMap(desc);
-    mZip->releaseEntry(desc);
-    ALOGE_IF(!descMap, "descMap is null");
-    if (!descMap) {
-        return false;
-    }
-
-    String8 desString((char const*)descMap->getDataPtr(),
-            descMap->getDataLength());
-    descMap->release();
     char const* s = desString.string();
+
+    // Create and initialize an AudioPlayer if we have an audio_conf.txt file
+    String8 audioConf;
+    if (readFile("audio_conf.txt", audioConf)) {
+        mAudioPlayer = new AudioPlayer;
+        if (!mAudioPlayer->init(audioConf.string())) {
+            ALOGE("mAudioPlayer.init failed");
+            mAudioPlayer = NULL;
+        }
+    }
 
     Animation animation;
 
     // Parse the description file
     for (;;) {
         const char* endl = strstr(s, "\n");
-        if (!endl) break;
+        if (endl == NULL) break;
         String8 line(s, endl - s);
         const char* l = line.string();
         int fps, width, height, count, pause;
         char path[ANIM_ENTRY_NAME_MAX];
+        char color[7] = "000000"; // default to black if unspecified
+
         char pathType;
         if (sscanf(l, "%d %d %d", &width, &height, &fps) == 3) {
-            //LOGD("> w=%d, h=%d, fps=%d", width, height, fps);
+            // ALOGD("> w=%d, h=%d, fps=%d", width, height, fps);
             animation.width = width;
             animation.height = height;
             animation.fps = fps;
         }
-        else if (sscanf(l, " %c %d %d %s", &pathType, &count, &pause, path) == 4) {
-            //LOGD("> type=%c, count=%d, pause=%d, path=%s", pathType, count, pause, path);
+        else if (sscanf(l, " %c %d %d %s #%6s", &pathType, &count, &pause, path, color) >= 4) {
+            // ALOGD("> type=%c, count=%d, pause=%d, path=%s, color=%s", pathType, count, pause, path, color);
             Animation::Part part;
             part.playUntilComplete = pathType == 'c';
             part.count = count;
             part.pause = pause;
             part.path = path;
+            part.audioFile = NULL;
+            if (!parseColor(color, part.backgroundColor)) {
+                ALOGE("> invalid color '#%s'", color);
+                part.backgroundColor[0] = 0.0f;
+                part.backgroundColor[1] = 0.0f;
+                part.backgroundColor[2] = 0.0f;
+            }
             animation.parts.add(part);
         }
 
@@ -466,17 +530,22 @@ bool BootAnimation::movie()
         if (leaf.size() > 0) {
             for (size_t j=0 ; j<pcount ; j++) {
                 if (path == animation.parts[j].path) {
-                    int method;
+                    uint16_t method;
                     // supports only stored png files
                     if (mZip->getEntryInfo(entry, &method, NULL, NULL, NULL, NULL, NULL)) {
                         if (method == ZipFileRO::kCompressStored) {
                             FileMap* map = mZip->createEntryFileMap(entry);
                             if (map) {
-                                Animation::Frame frame;
-                                frame.name = leaf;
-                                frame.map = map;
                                 Animation::Part& part(animation.parts.editItemAt(j));
-                                part.frames.add(frame);
+                                if (leaf == "audio.wav") {
+                                    // a part may have at most one audio file
+                                    part.audioFile = map;
+                                } else {
+                                    Animation::Frame frame;
+                                    frame.name = leaf;
+                                    frame.map = map;
+                                    part.frames.add(frame);
+                                }
                             }
                         }
                     }
@@ -507,7 +576,6 @@ bool BootAnimation::movie()
 
     const int xc = (mWidth - animation.width) / 2;
     const int yc = ((mHeight - animation.height) / 2);
-    nsecs_t lastFrame = systemTime();
     nsecs_t frameDuration = s2ns(1) / animation.fps;
 
     Region clearReg(Rect(mWidth, mHeight));
@@ -522,6 +590,17 @@ bool BootAnimation::movie()
             // Exit any non playuntil complete parts immediately
             if(exitPending() && !part.playUntilComplete)
                 break;
+
+            // only play audio file the first time we animate the part
+            if (r == 0 && mAudioPlayer != NULL && part.audioFile) {
+                mAudioPlayer->playFile(part.audioFile);
+            }
+
+            glClearColor(
+                    part.backgroundColor[0],
+                    part.backgroundColor[1],
+                    part.backgroundColor[2],
+                    1.0f);
 
             for (size_t j=0 ; j<fcount && (!exitPending() || part.playUntilComplete) ; j++) {
                 const Animation::Frame& frame(part.frames[j]);
@@ -544,9 +623,9 @@ bool BootAnimation::movie()
                     Region::const_iterator tail(clearReg.end());
                     glEnable(GL_SCISSOR_TEST);
                     while (head != tail) {
-                        const Rect& r(*head++);
-                        glScissor(r.left, mHeight - r.bottom,
-                                r.width(), r.height());
+                        const Rect& r2(*head++);
+                        glScissor(r2.left, mHeight - r2.bottom,
+                                r2.width(), r2.height());
                         glClear(GL_COLOR_BUFFER_BIT);
                     }
                     glDisable(GL_SCISSOR_TEST);

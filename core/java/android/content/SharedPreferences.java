@@ -71,9 +71,7 @@ public interface SharedPreferences {
          * {@link #commit} or {@link #apply} are called.
          * 
          * @param key The name of the preference to modify.
-         * @param value The new value for the preference.  Supplying {@code null}
-         *    as the value is equivalent to calling {@link #remove(String)} with
-         *    this key.
+         * @param value The new value for the preference.
          * 
          * @return Returns a reference to the same Editor object, so you can
          * chain put calls together.
@@ -82,7 +80,7 @@ public interface SharedPreferences {
         
         /**
          * Set a set of String values in the preferences editor, to be written
-         * back once {@link #commit} is called.
+         * back once {@link #commit} or {@link #apply} is called.
          * 
          * @param key The name of the preference to modify.
          * @param values The set of new values for the preference.  Passing {@code null}
@@ -355,7 +353,14 @@ public interface SharedPreferences {
     
     /**
      * Registers a callback to be invoked when a change happens to a preference.
-     * 
+     *
+     * <p class="caution"><strong>Caution:</strong> The preference manager does
+     * not currently store a strong reference to the listener. You must store a
+     * strong reference to the listener, or it will be susceptible to garbage
+     * collection. We recommend you keep a reference to the listener in the
+     * instance data of an object that will exist as long as you need the
+     * listener.</p>
+     *
      * @param listener The callback that will run.
      * @see #unregisterOnSharedPreferenceChangeListener
      */

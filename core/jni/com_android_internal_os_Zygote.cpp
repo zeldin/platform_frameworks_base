@@ -20,12 +20,12 @@
 #include <sys/mount.h>
 #include <linux/fs.h>
 
-#include <grp.h>
 #include <fcntl.h>
+#include <grp.h>
+#include <inttypes.h>
 #include <paths.h>
 #include <signal.h>
 #include <stdlib.h>
-#include <unistd.h>
 #include <sys/capability.h>
 #include <sys/personality.h>
 #include <sys/prctl.h>
@@ -34,15 +34,17 @@
 #include <sys/types.h>
 #include <sys/utsname.h>
 #include <sys/wait.h>
-
+#include <unistd.h>
 
 #include <cutils/fs.h>
 #include <cutils/multiuser.h>
 #include <cutils/sched_policy.h>
+#include <private/android_filesystem_config.h>
 #include <utils/String8.h>
 #include <selinux/android.h>
+#include <processgroup/processgroup.h>
 
-#include "android_runtime/AndroidRuntime.h"
+#include "core_jni_helpers.h"
 #include "JNIHelp.h"
 #include "ScopedLocalRef.h"
 #include "ScopedPrimitiveArray.h"
@@ -102,7 +104,7 @@ static void SigChldHandler(int /*signal_number*/) {
     // so that it is restarted by init and system server will be restarted
     // from there.
     if (pid == gSystemServerPid) {
-      ALOGE("Exit zygote because system server (%d) has terminated");
+      ALOGE("Exit zygote because system server (%d) has terminated", pid);
       kill(getpid(), SIGKILL);
     }
   }
@@ -187,7 +189,8 @@ static void SetRLimits(JNIEnv* env, jobjectArray javaRlimits) {
 
     int rc = setrlimit(javaRlimit[0], &rlim);
     if (rc == -1) {
-      ALOGE("setrlimit(%d, {%d, %d}) failed", javaRlimit[0], rlim.rlim_cur, rlim.rlim_max);
+      ALOGE("setrlimit(%d, {%ld, %ld}) failed", javaRlimit[0], rlim.rlim_cur,
+            rlim.rlim_max);
       RuntimeAbort(env);
     }
   }
@@ -233,7 +236,7 @@ static void SetCapabilities(JNIEnv* env, int64_t permitted, int64_t effective) {
   capdata[1].permitted = permitted >> 32;
 
   if (capset(&capheader, &capdata[0]) == -1) {
-    ALOGE("capset(%lld, %lld) failed", permitted, effective);
+    ALOGE("capset(%" PRId64 ", %" PRId64 ") failed", permitted, effective);
     RuntimeAbort(env);
   }
 }
@@ -429,13 +432,22 @@ static pid_t ForkAndSpecializeCommon(JNIEnv* env, uid_t uid, gid_t gid, jintArra
 
     DropCapabilitiesBoundingSet(env);
 
-    bool need_native_bridge = false;
-    if (instructionSet != NULL) {
+    bool use_native_bridge = !is_system_server && (instructionSet != NULL)
+        && android::NativeBridgeAvailable();
+    if (use_native_bridge) {
       ScopedUtfChars isa_string(env, instructionSet);
-      need_native_bridge = android::NeedsNativeBridge(isa_string.c_str());
+      use_native_bridge = android::NeedsNativeBridge(isa_string.c_str());
+    }
+    if (use_native_bridge && dataDir == NULL) {
+      // dataDir should never be null if we need to use a native bridge.
+      // In general, dataDir will never be null for normal applications. It can only happen in
+      // special cases (for isolated processes which are not associated with any app). These are
+      // launched by the framework and should not be emulated anyway.
+      use_native_bridge = false;
+      ALOGW("Native bridge will not be used because dataDir == NULL.");
     }
 
-    if (!MountEmulatedStorage(uid, mount_external, need_native_bridge)) {
+    if (!MountEmulatedStorage(uid, mount_external, use_native_bridge)) {
       ALOGW("Failed to mount emulated storage: %s", strerror(errno));
       if (errno == ENOTCONN || errno == EROFS) {
         // When device is actively encrypting, we get ENOTCONN here
@@ -449,19 +461,25 @@ static pid_t ForkAndSpecializeCommon(JNIEnv* env, uid_t uid, gid_t gid, jintArra
       }
     }
 
+    if (!is_system_server) {
+        int rc = createProcessGroup(uid, getpid());
+        if (rc != 0) {
+            if (rc == -EROFS) {
+                ALOGW("createProcessGroup failed, kernel missing CONFIG_CGROUP_CPUACCT?");
+            } else {
+                ALOGE("createProcessGroup(%d, %d) failed: %s", uid, pid, strerror(-rc));
+            }
+        }
+    }
+
     SetGids(env, javaGids);
 
     SetRLimits(env, javaRlimits);
 
-    if (!is_system_server && need_native_bridge) {
-      // Set the environment for the apps running with native bridge.
-      ScopedUtfChars isa_string(env, instructionSet);  // Known non-null because of need_native_...
-      if (dataDir == NULL) {
-        android::PreInitializeNativeBridge(NULL, isa_string.c_str());
-      } else {
-        ScopedUtfChars data_dir(env, dataDir);
-        android::PreInitializeNativeBridge(data_dir.c_str(), isa_string.c_str());
-      }
+    if (use_native_bridge) {
+      ScopedUtfChars isa_string(env, instructionSet);
+      ScopedUtfChars data_dir(env, dataDir);
+      android::PreInitializeNativeBridge(data_dir.c_str(), isa_string.c_str());
     }
 
     int rc = setresgid(gid, gid, gid);
@@ -550,9 +568,15 @@ static jint com_android_internal_os_Zygote_nativeForkAndSpecialize(
         jint debug_flags, jobjectArray rlimits,
         jint mount_external, jstring se_info, jstring se_name,
         jintArray fdsToClose, jstring instructionSet, jstring appDataDir) {
+    // Grant CAP_WAKE_ALARM to the Bluetooth process.
+    jlong capabilities = 0;
+    if (uid == AID_BLUETOOTH) {
+        capabilities |= (1LL << CAP_WAKE_ALARM);
+    }
+
     return ForkAndSpecializeCommon(env, uid, gid, gids, debug_flags,
-            rlimits, 0, 0, mount_external, se_info, se_name, false, fdsToClose,
-            instructionSet, appDataDir);
+            rlimits, capabilities, capabilities, mount_external, se_info,
+            se_name, false, fdsToClose, instructionSet, appDataDir);
 }
 
 static jint com_android_internal_os_Zygote_nativeForkSystemServer(
@@ -589,15 +613,11 @@ static JNINativeMethod gMethods[] = {
 };
 
 int register_com_android_internal_os_Zygote(JNIEnv* env) {
-  gZygoteClass = (jclass) env->NewGlobalRef(env->FindClass(kZygoteClassName));
-  if (gZygoteClass == NULL) {
-    RuntimeAbort(env);
-  }
-  gCallPostForkChildHooks = env->GetStaticMethodID(gZygoteClass, "callPostForkChildHooks",
+  gZygoteClass = MakeGlobalRefOrDie(env, FindClassOrDie(env, kZygoteClassName));
+  gCallPostForkChildHooks = GetStaticMethodIDOrDie(env, gZygoteClass, "callPostForkChildHooks",
                                                    "(ILjava/lang/String;)V");
 
-  return AndroidRuntime::registerNativeMethods(env, "com/android/internal/os/Zygote",
-      gMethods, NELEM(gMethods));
+  return RegisterMethodsOrDie(env, "com/android/internal/os/Zygote", gMethods, NELEM(gMethods));
 }
 }  // namespace android
 

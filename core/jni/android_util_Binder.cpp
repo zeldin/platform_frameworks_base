@@ -46,7 +46,7 @@
 #include <ScopedUtfChars.h>
 #include <ScopedLocalRef.h>
 
-#include <android_runtime/AndroidRuntime.h>
+#include "core_jni_helpers.h"
 
 //#undef ALOGV
 //#define ALOGV(...) fprintf(stderr, __VA_ARGS__)
@@ -82,15 +82,6 @@ static struct binderinternal_offsets_t
     jmethodID mForceGc;
 
 } gBinderInternalOffsets;
-
-// ----------------------------------------------------------------------------
-
-static struct debug_offsets_t
-{
-    // Class state.
-    jclass mClass;
-
-} gDebugOffsets;
 
 // ----------------------------------------------------------------------------
 
@@ -209,13 +200,10 @@ static void report_exception(JNIEnv* env, jthrowable excep, const char* msg)
          * that can be made while an exception is pending, so we want to
          * get the VM ptr, throw the exception, and then detach the thread.
          */
-        JavaVM* vm = jnienv_to_javavm(env);
         env->Throw(excep);
-        vm->DetachCurrentThread();
-        sleep(60);
+        env->ExceptionDescribe();
         ALOGE("Forcefully exiting");
         exit(1);
-        *((int *) 1) = 1;
     }
 
 bail:
@@ -264,8 +252,7 @@ protected:
         ALOGV("onTransact() on %p calling object %p in env %p vm %p\n", this, mObject, env, mVM);
 
         IPCThreadState* thread_state = IPCThreadState::self();
-        const int strict_policy_before = thread_state->getStrictModePolicy();
-        thread_state->setLastTransactionBinderFlags(flags);
+        const int32_t strict_policy_before = thread_state->getStrictModePolicy();
 
         //printf("Transact from %p to Java code sending: ", this);
         //data.print();
@@ -284,15 +271,11 @@ protected:
             env->DeleteLocalRef(excep);
         }
 
-        // Restore the Java binder thread's state if it changed while
-        // processing a call (as it would if the Parcel's header had a
-        // new policy mask and Parcel.enforceInterface() changed
-        // it...)
-        const int strict_policy_after = thread_state->getStrictModePolicy();
-        if (strict_policy_after != strict_policy_before) {
-            // Our thread-local...
-            thread_state->setStrictModePolicy(strict_policy_before);
-            // And the Java-level thread-local...
+        // Check if the strict mode state changed while processing the
+        // call.  The Binder state will be restored by the underlying
+        // Binder system in IPCThreadState, however we need to take care
+        // of the parallel Java state as well.
+        if (thread_state->getStrictModePolicy() != strict_policy_before) {
             set_dalvik_blockguard_policy(env, strict_policy_before);
         }
 
@@ -375,6 +358,8 @@ public:
     void add(const sp<JavaDeathRecipient>& recipient);
     void remove(const sp<JavaDeathRecipient>& recipient);
     sp<JavaDeathRecipient> find(jobject recipient);
+
+    Mutex& lock();  // Use with care; specifically for mutual exclusion during binder death
 };
 
 // ----------------------------------------------------------------------------
@@ -409,11 +394,18 @@ public:
                         "*** Uncaught exception returned from death notification!");
             }
 
-            // Demote from strong ref to weak after binderDied() has been delivered,
-            // to allow the DeathRecipient and BinderProxy to be GC'd if no longer needed.
-            mObjectWeak = env->NewWeakGlobalRef(mObject);
-            env->DeleteGlobalRef(mObject);
-            mObject = NULL;
+            // Serialize with our containing DeathRecipientList so that we can't
+            // delete the global ref on mObject while the list is being iterated.
+            sp<DeathRecipientList> list = mList.promote();
+            if (list != NULL) {
+                AutoMutex _l(list->lock());
+
+                // Demote from strong ref to weak after binderDied() has been delivered,
+                // to allow the DeathRecipient and BinderProxy to be GC'd if no longer needed.
+                mObjectWeak = env->NewWeakGlobalRef(mObject);
+                env->DeleteGlobalRef(mObject);
+                mObject = NULL;
+            }
         }
     }
 
@@ -533,6 +525,10 @@ sp<JavaDeathRecipient> DeathRecipientList::find(jobject recipient) {
         }
     }
     return NULL;
+}
+
+Mutex& DeathRecipientList::lock() {
+    return mLock;
 }
 
 // ----------------------------------------------------------------------------
@@ -700,6 +696,38 @@ void signalExceptionForError(JNIEnv* env, jobject obj, status_t err,
             jniThrowException(env, "java/lang/RuntimeException",
                     "Not allowed to write file descriptors here");
             break;
+        case -EBADF:
+            jniThrowException(env, "java/lang/RuntimeException",
+                    "Bad file descriptor");
+            break;
+        case -ENFILE:
+            jniThrowException(env, "java/lang/RuntimeException",
+                    "File table overflow");
+            break;
+        case -EMFILE:
+            jniThrowException(env, "java/lang/RuntimeException",
+                    "Too many open files");
+            break;
+        case -EFBIG:
+            jniThrowException(env, "java/lang/RuntimeException",
+                    "File too large");
+            break;
+        case -ENOSPC:
+            jniThrowException(env, "java/lang/RuntimeException",
+                    "No space left on device");
+            break;
+        case -ESPIPE:
+            jniThrowException(env, "java/lang/RuntimeException",
+                    "Illegal seek");
+            break;
+        case -EROFS:
+            jniThrowException(env, "java/lang/RuntimeException",
+                    "Read-only file system");
+            break;
+        case -EMLINK:
+            jniThrowException(env, "java/lang/RuntimeException",
+                    "Too many links");
+            break;
         default:
             ALOGE("Unknown binder error code. 0x%" PRIx32, err);
             String8 msg;
@@ -809,21 +837,13 @@ const char* const kBinderPathName = "android/os/Binder";
 
 static int int_register_android_os_Binder(JNIEnv* env)
 {
-    jclass clazz;
+    jclass clazz = FindClassOrDie(env, kBinderPathName);
 
-    clazz = env->FindClass(kBinderPathName);
-    LOG_FATAL_IF(clazz == NULL, "Unable to find class android.os.Binder");
+    gBinderOffsets.mClass = MakeGlobalRefOrDie(env, clazz);
+    gBinderOffsets.mExecTransact = GetMethodIDOrDie(env, clazz, "execTransact", "(IJJI)Z");
+    gBinderOffsets.mObject = GetFieldIDOrDie(env, clazz, "mObject", "J");
 
-    gBinderOffsets.mClass = (jclass) env->NewGlobalRef(clazz);
-    gBinderOffsets.mExecTransact
-        = env->GetMethodID(clazz, "execTransact", "(IJJI)Z");
-    assert(gBinderOffsets.mExecTransact);
-
-    gBinderOffsets.mObject
-        = env->GetFieldID(clazz, "mObject", "J");
-    assert(gBinderOffsets.mObject);
-
-    return AndroidRuntime::registerNativeMethods(
+    return RegisterMethodsOrDie(
         env, kBinderPathName,
         gBinderMethods, NELEM(gBinderMethods));
 }
@@ -893,17 +913,12 @@ const char* const kBinderInternalPathName = "com/android/internal/os/BinderInter
 
 static int int_register_android_os_BinderInternal(JNIEnv* env)
 {
-    jclass clazz;
+    jclass clazz = FindClassOrDie(env, kBinderInternalPathName);
 
-    clazz = env->FindClass(kBinderInternalPathName);
-    LOG_FATAL_IF(clazz == NULL, "Unable to find class com.android.internal.os.BinderInternal");
+    gBinderInternalOffsets.mClass = MakeGlobalRefOrDie(env, clazz);
+    gBinderInternalOffsets.mForceGc = GetStaticMethodIDOrDie(env, clazz, "forceBinderGc", "()V");
 
-    gBinderInternalOffsets.mClass = (jclass) env->NewGlobalRef(clazz);
-    gBinderInternalOffsets.mForceGc
-        = env->GetStaticMethodID(clazz, "forceBinderGc", "()V");
-    assert(gBinderInternalOffsets.mForceGc);
-
-    return AndroidRuntime::registerNativeMethods(
+    return RegisterMethodsOrDie(
         env, kBinderInternalPathName,
         gBinderInternalMethods, NELEM(gBinderInternalMethods));
 }
@@ -928,7 +943,8 @@ static jstring android_os_BinderProxy_getInterfaceDescriptor(JNIEnv* env, jobjec
     IBinder* target = (IBinder*) env->GetLongField(obj, gBinderProxyOffsets.mObject);
     if (target != NULL) {
         const String16& desc = target->getInterfaceDescriptor();
-        return env->NewString(desc.string(), desc.size());
+        return env->NewString(reinterpret_cast<const jchar*>(desc.string()),
+                              desc.size());
     }
     jniThrowException(env, "java/lang/RuntimeException",
             "No binder found for object");
@@ -997,7 +1013,9 @@ static bool push_eventlog_int(char** pos, const char* end, jint val) {
 }
 
 // From frameworks/base/core/java/android/content/EventLogTags.logtags:
-#define ENABLE_BINDER_SAMPLE 0
+
+static const bool kEnableBinderSample = false;
+
 #define LOGTAG_BINDER_OPERATION 52004
 
 static void conditionally_log_binder_call(int64_t start_millis,
@@ -1068,24 +1086,28 @@ static jboolean android_os_BinderProxy_transact(JNIEnv* env, jobject obj,
     ALOGV("Java code calling transact on %p in Java object %p with code %" PRId32 "\n",
             target, obj, code);
 
-#if ENABLE_BINDER_SAMPLE
-    // Only log the binder call duration for things on the Java-level main thread.
-    // But if we don't
-    const bool time_binder_calls = should_time_binder_calls();
 
+    bool time_binder_calls;
     int64_t start_millis;
-    if (time_binder_calls) {
-        start_millis = uptimeMillis();
+    if (kEnableBinderSample) {
+        // Only log the binder call duration for things on the Java-level main thread.
+        // But if we don't
+        time_binder_calls = should_time_binder_calls();
+
+        if (time_binder_calls) {
+            start_millis = uptimeMillis();
+        }
     }
-#endif
+
     //printf("Transact from Java code to %p sending: ", target); data->print();
     status_t err = target->transact(code, *data, reply, flags);
     //if (reply) printf("Transact from Java code to %p received: ", target); reply->print();
-#if ENABLE_BINDER_SAMPLE
-    if (time_binder_calls) {
-        conditionally_log_binder_call(start_millis, target, code);
+
+    if (kEnableBinderSample) {
+        if (time_binder_calls) {
+            conditionally_log_binder_call(start_millis, target, code);
+        }
     }
-#endif
 
     if (err == NO_ERROR) {
         return JNI_TRUE;
@@ -1200,7 +1222,7 @@ static const JNINativeMethod gBinderProxyMethods[] = {
     {"pingBinder",          "()Z", (void*)android_os_BinderProxy_pingBinder},
     {"isBinderAlive",       "()Z", (void*)android_os_BinderProxy_isBinderAlive},
     {"getInterfaceDescriptor", "()Ljava/lang/String;", (void*)android_os_BinderProxy_getInterfaceDescriptor},
-    {"transact",            "(ILandroid/os/Parcel;Landroid/os/Parcel;I)Z", (void*)android_os_BinderProxy_transact},
+    {"transactNative",      "(ILandroid/os/Parcel;Landroid/os/Parcel;I)Z", (void*)android_os_BinderProxy_transact},
     {"linkToDeath",         "(Landroid/os/IBinder$DeathRecipient;I)V", (void*)android_os_BinderProxy_linkToDeath},
     {"unlinkToDeath",       "(Landroid/os/IBinder$DeathRecipient;I)Z", (void*)android_os_BinderProxy_unlinkToDeath},
     {"destroy",             "()V", (void*)android_os_BinderProxy_destroy},
@@ -1210,39 +1232,24 @@ const char* const kBinderProxyPathName = "android/os/BinderProxy";
 
 static int int_register_android_os_BinderProxy(JNIEnv* env)
 {
-    jclass clazz;
+    jclass clazz = FindClassOrDie(env, "java/lang/Error");
+    gErrorOffsets.mClass = MakeGlobalRefOrDie(env, clazz);
 
-    clazz = env->FindClass("java/lang/Error");
-    LOG_FATAL_IF(clazz == NULL, "Unable to find class java.lang.Error");
-    gErrorOffsets.mClass = (jclass) env->NewGlobalRef(clazz);
+    clazz = FindClassOrDie(env, kBinderProxyPathName);
+    gBinderProxyOffsets.mClass = MakeGlobalRefOrDie(env, clazz);
+    gBinderProxyOffsets.mConstructor = GetMethodIDOrDie(env, clazz, "<init>", "()V");
+    gBinderProxyOffsets.mSendDeathNotice = GetStaticMethodIDOrDie(env, clazz, "sendDeathNotice",
+            "(Landroid/os/IBinder$DeathRecipient;)V");
 
-    clazz = env->FindClass(kBinderProxyPathName);
-    LOG_FATAL_IF(clazz == NULL, "Unable to find class android.os.BinderProxy");
+    gBinderProxyOffsets.mObject = GetFieldIDOrDie(env, clazz, "mObject", "J");
+    gBinderProxyOffsets.mSelf = GetFieldIDOrDie(env, clazz, "mSelf",
+                                                "Ljava/lang/ref/WeakReference;");
+    gBinderProxyOffsets.mOrgue = GetFieldIDOrDie(env, clazz, "mOrgue", "J");
 
-    gBinderProxyOffsets.mClass = (jclass) env->NewGlobalRef(clazz);
-    gBinderProxyOffsets.mConstructor
-        = env->GetMethodID(clazz, "<init>", "()V");
-    assert(gBinderProxyOffsets.mConstructor);
-    gBinderProxyOffsets.mSendDeathNotice
-        = env->GetStaticMethodID(clazz, "sendDeathNotice", "(Landroid/os/IBinder$DeathRecipient;)V");
-    assert(gBinderProxyOffsets.mSendDeathNotice);
+    clazz = FindClassOrDie(env, "java/lang/Class");
+    gClassOffsets.mGetName = GetMethodIDOrDie(env, clazz, "getName", "()Ljava/lang/String;");
 
-    gBinderProxyOffsets.mObject
-        = env->GetFieldID(clazz, "mObject", "J");
-    assert(gBinderProxyOffsets.mObject);
-    gBinderProxyOffsets.mSelf
-        = env->GetFieldID(clazz, "mSelf", "Ljava/lang/ref/WeakReference;");
-    assert(gBinderProxyOffsets.mSelf);
-    gBinderProxyOffsets.mOrgue
-        = env->GetFieldID(clazz, "mOrgue", "J");
-    assert(gBinderProxyOffsets.mOrgue);
-
-    clazz = env->FindClass("java/lang/Class");
-    LOG_FATAL_IF(clazz == NULL, "Unable to find java.lang.Class");
-    gClassOffsets.mGetName = env->GetMethodID(clazz, "getName", "()Ljava/lang/String;");
-    assert(gClassOffsets.mGetName);
-
-    return AndroidRuntime::registerNativeMethods(
+    return RegisterMethodsOrDie(
         env, kBinderProxyPathName,
         gBinderProxyMethods, NELEM(gBinderProxyMethods));
 }
@@ -1260,28 +1267,20 @@ int register_android_os_Binder(JNIEnv* env)
     if (int_register_android_os_BinderProxy(env) < 0)
         return -1;
 
-    jclass clazz;
+    jclass clazz = FindClassOrDie(env, "android/util/Log");
+    gLogOffsets.mClass = MakeGlobalRefOrDie(env, clazz);
+    gLogOffsets.mLogE = GetStaticMethodIDOrDie(env, clazz, "e",
+            "(Ljava/lang/String;Ljava/lang/String;Ljava/lang/Throwable;)I");
 
-    clazz = env->FindClass("android/util/Log");
-    LOG_FATAL_IF(clazz == NULL, "Unable to find class android.util.Log");
-    gLogOffsets.mClass = (jclass) env->NewGlobalRef(clazz);
-    gLogOffsets.mLogE = env->GetStaticMethodID(
-        clazz, "e", "(Ljava/lang/String;Ljava/lang/String;Ljava/lang/Throwable;)I");
-    assert(gLogOffsets.mLogE);
+    clazz = FindClassOrDie(env, "android/os/ParcelFileDescriptor");
+    gParcelFileDescriptorOffsets.mClass = MakeGlobalRefOrDie(env, clazz);
+    gParcelFileDescriptorOffsets.mConstructor = GetMethodIDOrDie(env, clazz, "<init>",
+                                                                 "(Ljava/io/FileDescriptor;)V");
 
-    clazz = env->FindClass("android/os/ParcelFileDescriptor");
-    LOG_FATAL_IF(clazz == NULL, "Unable to find class android.os.ParcelFileDescriptor");
-    gParcelFileDescriptorOffsets.mClass = (jclass) env->NewGlobalRef(clazz);
-    gParcelFileDescriptorOffsets.mConstructor
-        = env->GetMethodID(clazz, "<init>", "(Ljava/io/FileDescriptor;)V");
-
-    clazz = env->FindClass("android/os/StrictMode");
-    LOG_FATAL_IF(clazz == NULL, "Unable to find class android.os.StrictMode");
-    gStrictModeCallbackOffsets.mClass = (jclass) env->NewGlobalRef(clazz);
-    gStrictModeCallbackOffsets.mCallback = env->GetStaticMethodID(
-        clazz, "onBinderStrictModePolicyChange", "(I)V");
-    LOG_FATAL_IF(gStrictModeCallbackOffsets.mCallback == NULL,
-                 "Unable to find strict mode callback.");
+    clazz = FindClassOrDie(env, "android/os/StrictMode");
+    gStrictModeCallbackOffsets.mClass = MakeGlobalRefOrDie(env, clazz);
+    gStrictModeCallbackOffsets.mCallback = GetStaticMethodIDOrDie(env, clazz,
+            "onBinderStrictModePolicyChange", "(I)V");
 
     return 0;
 }

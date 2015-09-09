@@ -16,21 +16,27 @@
 
 package android.content.pm;
 
-import static android.system.OsConstants.*;
+import static android.system.OsConstants.S_IFDIR;
+import static android.system.OsConstants.S_IFMT;
+import static android.system.OsConstants.S_IRGRP;
+import static android.system.OsConstants.S_IROTH;
+import static android.system.OsConstants.S_IRWXU;
+import static android.system.OsConstants.S_ISDIR;
+import static android.system.OsConstants.S_IXGRP;
+import static android.system.OsConstants.S_IXOTH;
 
-import com.android.frameworks.coretests.R;
-import com.android.internal.content.PackageHelper;
-
+import android.app.PackageInstallObserver;
 import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
-import android.content.pm.PackageInfo;
-import android.content.pm.PackageManager;
 import android.content.pm.PackageManager.NameNotFoundException;
+import android.content.pm.PackageParser.PackageParserException;
 import android.content.res.Resources;
 import android.content.res.Resources.NotFoundException;
 import android.net.Uri;
+import android.os.Binder;
+import android.os.Bundle;
 import android.os.Environment;
 import android.os.FileUtils;
 import android.os.IBinder;
@@ -52,14 +58,17 @@ import android.system.StructStat;
 import android.test.AndroidTestCase;
 import android.test.suitebuilder.annotation.LargeTest;
 import android.test.suitebuilder.annotation.SmallTest;
-import android.util.DisplayMetrics;
 import android.util.Log;
+
+import com.android.frameworks.coretests.R;
+import com.android.internal.content.PackageHelper;
 
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
-
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 
@@ -72,9 +81,7 @@ public class PackageManagerTests extends AndroidTestCase {
 
     public final long WAIT_TIME_INCR = 5 * 1000;
 
-    private static final String APP_LIB_DIR_PREFIX = "/data/app-lib/";
-
-    private static final String SECURE_CONTAINERS_PREFIX = "/mnt/asec/";
+    private static final String SECURE_CONTAINERS_PREFIX = "/mnt/asec";
 
     private static final int APP_INSTALL_AUTO = PackageHelper.APP_INSTALL_AUTO;
 
@@ -116,12 +123,16 @@ public class PackageManagerTests extends AndroidTestCase {
         super.tearDown();
     }
 
-    private class PackageInstallObserver extends IPackageInstallObserver.Stub {
+    private class TestInstallObserver extends PackageInstallObserver {
         public int returnCode;
 
         private boolean doneFlag = false;
 
-        public void packageInstalled(String packageName, int returnCode) {
+        @Override
+        public void onPackageInstalled(String basePackageName, int returnCode, String msg,
+                Bundle extras) {
+            Log.d(TAG, "onPackageInstalled: code=" + returnCode + ", msg=" + msg + ", extras="
+                    + extras);
             synchronized (this) {
                 this.returnCode = returnCode;
                 doneFlag = true;
@@ -202,7 +213,7 @@ public class PackageManagerTests extends AndroidTestCase {
 
     public void invokeInstallPackage(Uri packageURI, int flags, GenericReceiver receiver,
             boolean shouldSucceed) {
-        PackageInstallObserver observer = new PackageInstallObserver();
+        TestInstallObserver observer = new TestInstallObserver();
         mContext.registerReceiver(receiver, receiver.filter);
         try {
             // Wait on observer
@@ -260,7 +271,7 @@ public class PackageManagerTests extends AndroidTestCase {
     }
 
     public void invokeInstallPackageFail(Uri packageURI, int flags, int expectedResult) {
-        PackageInstallObserver observer = new PackageInstallObserver();
+        TestInstallObserver observer = new TestInstallObserver();
         try {
             // Wait on observer
             synchronized (observer) {
@@ -301,14 +312,11 @@ public class PackageManagerTests extends AndroidTestCase {
         return Uri.fromFile(outFile);
     }
 
-    private PackageParser.Package parsePackage(Uri packageURI) {
+    private PackageParser.Package parsePackage(Uri packageURI) throws PackageParserException {
         final String archiveFilePath = packageURI.getPath();
-        PackageParser packageParser = new PackageParser(archiveFilePath);
+        PackageParser packageParser = new PackageParser();
         File sourceFile = new File(archiveFilePath);
-        DisplayMetrics metrics = new DisplayMetrics();
-        metrics.setToDefaults();
-        PackageParser.Package pkg = packageParser.parsePackage(sourceFile, archiveFilePath,
-                metrics, 0);
+        PackageParser.Package pkg = packageParser.parseMonolithicPackage(sourceFile, 0);
         packageParser = null;
         return pkg;
     }
@@ -406,16 +414,18 @@ public class PackageManagerTests extends AndroidTestCase {
             String appInstallPath = new File(dataDir, "app").getPath();
             String drmInstallPath = new File(dataDir, "app-private").getPath();
             File srcDir = new File(info.sourceDir);
-            String srcPath = srcDir.getParent();
+            String srcPath = srcDir.getParentFile().getParent();
             File publicSrcDir = new File(info.publicSourceDir);
-            String publicSrcPath = publicSrcDir.getParent();
+            String publicSrcPath = publicSrcDir.getParentFile().getParent();
             long pkgLen = new File(info.sourceDir).length();
+            String expectedLibPath = new File(new File(info.sourceDir).getParentFile(), "lib")
+                    .getPath();
 
             int rLoc = getInstallLoc(flags, expInstallLocation, pkgLen);
             if (rLoc == INSTALL_LOC_INT) {
                 if ((flags & PackageManager.INSTALL_FORWARD_LOCK) != 0) {
                     assertTrue("The application should be installed forward locked",
-                            (info.flags & ApplicationInfo.FLAG_FORWARD_LOCK) != 0);
+                            (info.privateFlags & ApplicationInfo.PRIVATE_FLAG_FORWARD_LOCK) != 0);
                     assertStartsWith("The APK path should point to the ASEC",
                             SECURE_CONTAINERS_PREFIX, srcPath);
                     assertStartsWith("The public APK path should point to the ASEC",
@@ -431,13 +441,13 @@ public class PackageManagerTests extends AndroidTestCase {
                         fail("compat check: Can't read " + info.dataDir + "/lib");
                     }
                 } else {
-                    assertFalse((info.flags & ApplicationInfo.FLAG_FORWARD_LOCK) != 0);
-                    assertEquals(srcPath, appInstallPath);
-                    assertEquals(publicSrcPath, appInstallPath);
+                    assertFalse(
+                            (info.privateFlags & ApplicationInfo.PRIVATE_FLAG_FORWARD_LOCK) != 0);
+                    assertEquals(appInstallPath, srcPath);
+                    assertEquals(appInstallPath, publicSrcPath);
                     assertStartsWith("Native library should point to shared lib directory",
-                            new File(APP_LIB_DIR_PREFIX, info.packageName).getPath(),
-                            info.nativeLibraryDir);
-                    assertDirOwnerGroupPerms(
+                            expectedLibPath, info.nativeLibraryDir);
+                    assertDirOwnerGroupPermsIfExists(
                             "Native library directory should be owned by system:system and 0755",
                             Process.SYSTEM_UID, Process.SYSTEM_UID,
                             S_IRWXU | S_IRGRP | S_IXGRP | S_IROTH | S_IXOTH,
@@ -447,27 +457,27 @@ public class PackageManagerTests extends AndroidTestCase {
 
                 // Make sure the native library dir is not a symlink
                 final File nativeLibDir = new File(info.nativeLibraryDir);
-                assertTrue("Native library dir should exist at " + info.nativeLibraryDir,
-                        nativeLibDir.exists());
-                try {
-                    assertEquals("Native library dir should not be a symlink",
-                            info.nativeLibraryDir, nativeLibDir.getCanonicalPath());
-                } catch (IOException e) {
-                    fail("Can't read " + nativeLibDir.getPath());
+                if (nativeLibDir.exists()) {
+                    try {
+                        assertEquals("Native library dir should not be a symlink",
+                                info.nativeLibraryDir, nativeLibDir.getCanonicalPath());
+                    } catch (IOException e) {
+                        fail("Can't read " + nativeLibDir.getPath());
+                    }
                 }
             } else if (rLoc == INSTALL_LOC_SD) {
                 if ((flags & PackageManager.INSTALL_FORWARD_LOCK) != 0) {
                     assertTrue("The application should be installed forward locked",
-                            (info.flags & ApplicationInfo.FLAG_FORWARD_LOCK) != 0);
+                            (info.privateFlags & ApplicationInfo.PRIVATE_FLAG_FORWARD_LOCK) != 0);
                 } else {
                     assertFalse("The application should not be installed forward locked",
-                            (info.flags & ApplicationInfo.FLAG_FORWARD_LOCK) != 0);
+                            (info.privateFlags & ApplicationInfo.PRIVATE_FLAG_FORWARD_LOCK) != 0);
                 }
                 assertTrue("Application flags (" + info.flags
                         + ") should contain FLAG_EXTERNAL_STORAGE",
                         (info.flags & ApplicationInfo.FLAG_EXTERNAL_STORAGE) != 0);
                 // Might need to check:
-                // ((info.flags & ApplicationInfo.FLAG_FORWARD_LOCK) != 0)
+                // ((info.privateFlags & ApplicationInfo.PRIVATE_FLAG_FORWARD_LOCK) != 0)
                 assertStartsWith("The APK path should point to the ASEC",
                         SECURE_CONTAINERS_PREFIX, srcPath);
                 assertStartsWith("The public APK path should point to the ASEC",
@@ -496,9 +506,13 @@ public class PackageManagerTests extends AndroidTestCase {
         }
     }
 
-    private void assertDirOwnerGroupPerms(String reason, int uid, int gid, int perms, String path) {
-        final StructStat stat;
+    private void assertDirOwnerGroupPermsIfExists(String reason, int uid, int gid, int perms,
+            String path) {
+        if (!new File(path).exists()) {
+            return;
+        }
 
+        final StructStat stat;
         try {
             stat = Os.lstat(path);
         } catch (ErrnoException e) {
@@ -577,18 +591,18 @@ public class PackageManagerTests extends AndroidTestCase {
 
         PackageParser.Package pkg;
 
-        InstallParams(String outFileName, int rawResId) {
+        InstallParams(String outFileName, int rawResId) throws PackageParserException {
             this.pkg = getParsedPackage(outFileName, rawResId);
-            this.packageURI = Uri.fromFile(new File(pkg.mScanPath));
+            this.packageURI = Uri.fromFile(new File(pkg.codePath));
         }
 
         InstallParams(PackageParser.Package pkg) {
-            this.packageURI = Uri.fromFile(new File(pkg.mScanPath));
+            this.packageURI = Uri.fromFile(new File(pkg.codePath));
             this.pkg = pkg;
         }
 
         long getApkSize() {
-            File file = new File(pkg.mScanPath);
+            File file = new File(pkg.codePath);
             return file.length();
         }
     }
@@ -689,7 +703,8 @@ public class PackageManagerTests extends AndroidTestCase {
         }
     }
 
-    private PackageParser.Package getParsedPackage(String outFileName, int rawResId) {
+    private PackageParser.Package getParsedPackage(String outFileName, int rawResId)
+            throws PackageParserException {
         PackageManager pm = mContext.getPackageManager();
         File filesDir = mContext.getFilesDir();
         File outFile = new File(filesDir, outFileName);
@@ -1341,7 +1356,7 @@ public class PackageManagerTests extends AndroidTestCase {
                 assertUninstalled(info);
             }
         } finally {
-            File outFile = new File(ip.pkg.mScanPath);
+            File outFile = new File(ip.pkg.codePath);
             if (outFile != null && outFile.exists()) {
                 outFile.delete();
             }
@@ -3002,7 +3017,7 @@ public class PackageManagerTests extends AndroidTestCase {
     @LargeTest
     public void testReplaceMatchNoCerts1() throws Exception {
         replaceCerts(APP1_CERT1_CERT2, APP1_CERT3, true, true,
-                PackageManager.INSTALL_PARSE_FAILED_INCONSISTENT_CERTIFICATES);
+                PackageManager.INSTALL_FAILED_UPDATE_INCOMPATIBLE);
     }
 
     /*
@@ -3012,7 +3027,7 @@ public class PackageManagerTests extends AndroidTestCase {
     @LargeTest
     public void testReplaceMatchNoCerts2() throws Exception {
         replaceCerts(APP1_CERT1_CERT2, APP1_CERT3_CERT4, true, true,
-                PackageManager.INSTALL_PARSE_FAILED_INCONSISTENT_CERTIFICATES);
+                PackageManager.INSTALL_FAILED_UPDATE_INCOMPATIBLE);
     }
 
     /*
@@ -3022,7 +3037,7 @@ public class PackageManagerTests extends AndroidTestCase {
     @LargeTest
     public void testReplaceMatchSomeCerts1() throws Exception {
         replaceCerts(APP1_CERT1_CERT2, APP1_CERT1, true, true,
-                PackageManager.INSTALL_PARSE_FAILED_INCONSISTENT_CERTIFICATES);
+                PackageManager.INSTALL_FAILED_UPDATE_INCOMPATIBLE);
     }
 
     /*
@@ -3032,7 +3047,7 @@ public class PackageManagerTests extends AndroidTestCase {
     @LargeTest
     public void testReplaceMatchSomeCerts2() throws Exception {
         replaceCerts(APP1_CERT1_CERT2, APP1_CERT2, true, true,
-                PackageManager.INSTALL_PARSE_FAILED_INCONSISTENT_CERTIFICATES);
+                PackageManager.INSTALL_FAILED_UPDATE_INCOMPATIBLE);
     }
 
     /*
@@ -3042,7 +3057,7 @@ public class PackageManagerTests extends AndroidTestCase {
     @LargeTest
     public void testReplaceMatchMoreCerts() throws Exception {
         replaceCerts(APP1_CERT1, APP1_CERT1_CERT2, true, true,
-                PackageManager.INSTALL_PARSE_FAILED_INCONSISTENT_CERTIFICATES);
+                PackageManager.INSTALL_FAILED_UPDATE_INCOMPATIBLE);
     }
 
     /*
@@ -3053,7 +3068,7 @@ public class PackageManagerTests extends AndroidTestCase {
     @LargeTest
     public void testReplaceMatchMoreCertsReplaceSomeCerts() throws Exception {
         InstallParams ip = replaceCerts(APP1_CERT1, APP1_CERT1_CERT2, false, true,
-                PackageManager.INSTALL_PARSE_FAILED_INCONSISTENT_CERTIFICATES);
+                PackageManager.INSTALL_FAILED_UPDATE_INCOMPATIBLE);
         try {
             int rFlags = PackageManager.INSTALL_REPLACE_EXISTING;
             installFromRawResource("install.apk", APP1_CERT1, rFlags, false,
@@ -3067,6 +3082,430 @@ public class PackageManagerTests extends AndroidTestCase {
             }
         }
     }
+
+    /**
+     * The following tests are related to testing KeySets-based key rotation
+     */
+    /*
+     * Check if an apk which does not specify an upgrade-keyset may be upgraded
+     * by an apk which does
+     */
+    public void testNoKSToUpgradeKS() throws Exception {
+        replaceCerts(R.raw.keyset_sa_unone, R.raw.keyset_sa_ua, true, false, -1);
+    }
+
+    /*
+     * Check if an apk which does specify an upgrade-keyset may be downgraded to
+     * an apk which does not
+     */
+    public void testUpgradeKSToNoKS() throws Exception {
+        replaceCerts(R.raw.keyset_sa_ua, R.raw.keyset_sa_unone, true, false, -1);
+    }
+
+    /*
+     * Check if an apk signed by a key other than the upgrade keyset can update
+     * an app
+     */
+    public void testUpgradeKSWithWrongKey() throws Exception {
+        replaceCerts(R.raw.keyset_sa_ua, R.raw.keyset_sb_ua, true, true,
+                PackageManager.INSTALL_FAILED_UPDATE_INCOMPATIBLE);
+    }
+
+    /*
+     * Check if an apk signed by its signing key, which is not an upgrade key,
+     * can upgrade an app.
+     */
+    public void testUpgradeKSWithWrongSigningKey() throws Exception {
+        replaceCerts(R.raw.keyset_sa_ub, R.raw.keyset_sa_ub, true, true,
+                PackageManager.INSTALL_FAILED_UPDATE_INCOMPATIBLE);
+    }
+
+    /*
+     * Check if an apk signed by its upgrade key, which is not its signing key,
+     * can upgrade an app.
+     */
+    public void testUpgradeKSWithUpgradeKey() throws Exception {
+        replaceCerts(R.raw.keyset_sa_ub, R.raw.keyset_sb_ub, true, false, -1);
+    }
+    /*
+     * Check if an apk signed by its upgrade key, which is its signing key, can
+     * upgrade an app.
+     */
+    public void testUpgradeKSWithSigningUpgradeKey() throws Exception {
+        replaceCerts(R.raw.keyset_sa_ua, R.raw.keyset_sa_ua, true, false, -1);
+    }
+
+    /*
+     * Check if an apk signed by multiple keys, one of which is its upgrade key,
+     * can upgrade an app.
+     */
+    public void testMultipleUpgradeKSWithUpgradeKey() throws Exception {
+        replaceCerts(R.raw.keyset_sa_ua, R.raw.keyset_sab_ua, true, false, -1);
+    }
+
+    /*
+     * Check if an apk signed by multiple keys, one of which is its signing key,
+     * but none of which is an upgrade key, can upgrade an app.
+     */
+    public void testMultipleUpgradeKSWithSigningKey() throws Exception {
+        replaceCerts(R.raw.keyset_sau_ub, R.raw.keyset_sa_ua, true, true,
+                PackageManager.INSTALL_FAILED_UPDATE_INCOMPATIBLE);
+    }
+
+    /*
+     * Check if an apk which defines multiple (two) upgrade keysets is
+     * upgrade-able by either.
+     */
+    public void testUpgradeKSWithMultipleUpgradeKeySets() throws Exception {
+        replaceCerts(R.raw.keyset_sa_ua_ub, R.raw.keyset_sa_ua, true, false, -1);
+        replaceCerts(R.raw.keyset_sa_ua_ub, R.raw.keyset_sb_ub, true, false, -1);
+    }
+
+    /*
+     * Check if an apk's sigs are changed after upgrading with a non-signing
+     * key.
+     *
+     * TODO: consider checking against hard-coded Signatures in the Sig-tests
+     */
+    public void testSigChangeAfterUpgrade() throws Exception {
+        // install original apk and grab sigs
+        installFromRawResource("tmp.apk", R.raw.keyset_sa_ub,
+                0, false, false, -1, PackageInfo.INSTALL_LOCATION_UNSPECIFIED);
+        PackageManager pm = getPm();
+        String pkgName = "com.android.frameworks.coretests.keysets";
+        PackageInfo pi = pm.getPackageInfo(pkgName, PackageManager.GET_SIGNATURES);
+        assertTrue("Package should only have one signature, sig A",
+                pi.signatures.length == 1);
+        String sigBefore = pi.signatures[0].toCharsString();
+        // install apk signed by different upgrade KeySet
+        installFromRawResource("tmp2.apk", R.raw.keyset_sb_ub,
+                PackageManager.INSTALL_REPLACE_EXISTING, false, false, -1,
+                PackageInfo.INSTALL_LOCATION_UNSPECIFIED);
+        pi = pm.getPackageInfo(pkgName, PackageManager.GET_SIGNATURES);
+        assertTrue("Package should only have one signature, sig B",
+                pi.signatures.length == 1);
+        String sigAfter = pi.signatures[0].toCharsString();
+        assertFalse("Package signatures did not change after upgrade!",
+                sigBefore.equals(sigAfter));
+        cleanUpInstall(pkgName);
+    }
+
+    /*
+     * Check if an apk's sig is the same  after upgrading with a signing
+     * key.
+     */
+    public void testSigSameAfterUpgrade() throws Exception {
+        // install original apk and grab sigs
+        installFromRawResource("tmp.apk", R.raw.keyset_sa_ua,
+                0, false, false, -1, PackageInfo.INSTALL_LOCATION_UNSPECIFIED);
+        PackageManager pm = getPm();
+        String pkgName = "com.android.frameworks.coretests.keysets";
+        PackageInfo pi = pm.getPackageInfo(pkgName, PackageManager.GET_SIGNATURES);
+        assertTrue("Package should only have one signature, sig A",
+                pi.signatures.length == 1);
+        String sigBefore = pi.signatures[0].toCharsString();
+        // install apk signed by same upgrade KeySet
+        installFromRawResource("tmp2.apk", R.raw.keyset_sa_ua,
+                PackageManager.INSTALL_REPLACE_EXISTING, false, false, -1,
+                PackageInfo.INSTALL_LOCATION_UNSPECIFIED);
+        pi = pm.getPackageInfo(pkgName, PackageManager.GET_SIGNATURES);
+        assertTrue("Package should only have one signature, sig A",
+                pi.signatures.length == 1);
+        String sigAfter = pi.signatures[0].toCharsString();
+        assertTrue("Package signatures changed after upgrade!",
+                sigBefore.equals(sigAfter));
+        cleanUpInstall(pkgName);
+    }
+
+    /*
+     * Check if an apk's sigs are the same after upgrading with an app with
+     * a subset of the original signing keys.
+     */
+    public void testSigRemovedAfterUpgrade() throws Exception {
+        // install original apk and grab sigs
+        installFromRawResource("tmp.apk", R.raw.keyset_sab_ua,
+                0, false, false, -1, PackageInfo.INSTALL_LOCATION_UNSPECIFIED);
+        PackageManager pm = getPm();
+        String pkgName = "com.android.frameworks.coretests.keysets";
+        PackageInfo pi = pm.getPackageInfo(pkgName, PackageManager.GET_SIGNATURES);
+        assertTrue("Package should have two signatures, sig A and sig B",
+                pi.signatures.length == 2);
+        Set<String> sigsBefore = new HashSet<String>();
+        for (int i = 0; i < pi.signatures.length; i++) {
+            sigsBefore.add(pi.signatures[i].toCharsString());
+        }
+        // install apk signed subset upgrade KeySet
+        installFromRawResource("tmp2.apk", R.raw.keyset_sa_ua,
+                PackageManager.INSTALL_REPLACE_EXISTING, false, false, -1,
+                PackageInfo.INSTALL_LOCATION_UNSPECIFIED);
+        pi = pm.getPackageInfo(pkgName, PackageManager.GET_SIGNATURES);
+        assertTrue("Package should only have one signature, sig A",
+                pi.signatures.length == 1);
+        String sigAfter = pi.signatures[0].toCharsString();
+        assertTrue("Original package signatures did not contain new sig",
+                sigsBefore.contains(sigAfter));
+        cleanUpInstall(pkgName);
+    }
+
+    /*
+     * Check if an apk's sigs are added to after upgrading with an app with
+     * a superset of the original signing keys.
+     */
+    public void testSigAddedAfterUpgrade() throws Exception {
+        // install original apk and grab sigs
+        installFromRawResource("tmp.apk", R.raw.keyset_sa_ua,
+                0, false, false, -1, PackageInfo.INSTALL_LOCATION_UNSPECIFIED);
+        PackageManager pm = getPm();
+        String pkgName = "com.android.frameworks.coretests.keysets";
+        PackageInfo pi = pm.getPackageInfo(pkgName, PackageManager.GET_SIGNATURES);
+        assertTrue("Package should only have one signature, sig A",
+                pi.signatures.length == 1);
+        String sigBefore = pi.signatures[0].toCharsString();
+        // install apk signed subset upgrade KeySet
+        installFromRawResource("tmp2.apk", R.raw.keyset_sab_ua,
+                PackageManager.INSTALL_REPLACE_EXISTING, false, false, -1,
+                PackageInfo.INSTALL_LOCATION_UNSPECIFIED);
+        pi = pm.getPackageInfo(pkgName, PackageManager.GET_SIGNATURES);
+        assertTrue("Package should have two signatures, sig A and sig B",
+                pi.signatures.length == 2);
+        Set<String> sigsAfter = new HashSet<String>();
+        for (int i = 0; i < pi.signatures.length; i++) {
+            sigsAfter.add(pi.signatures[i].toCharsString());
+        }
+        assertTrue("Package signatures did not change after upgrade!",
+                sigsAfter.contains(sigBefore));
+        cleanUpInstall(pkgName);
+    }
+
+    /*
+     * Check if an apk gains signature-level permission after changing to the a
+     * new signature, for which a permission should be granted.
+     */
+    public void testUpgradeSigPermGained() throws Exception {
+        // install apk which defines permission
+        installFromRawResource("permDef.apk", R.raw.keyset_permdef_sa_unone,
+                0, false, false, -1, PackageInfo.INSTALL_LOCATION_UNSPECIFIED);
+        // install apk which uses permission but does not have sig
+        installFromRawResource("permUse.apk", R.raw.keyset_permuse_sb_ua_ub,
+                0, false, false, -1, PackageInfo.INSTALL_LOCATION_UNSPECIFIED);
+        // verify that package does not have perm before
+        PackageManager pm = getPm();
+        String permPkgName = "com.android.frameworks.coretests.keysets_permdef";
+        String pkgName = "com.android.frameworks.coretests.keysets";
+        String permName = "com.android.frameworks.coretests.keysets_permdef.keyset_perm";
+        assertFalse("keyset permission granted to app without same signature!",
+                    pm.checkPermission(permName, pkgName)
+                    == PackageManager.PERMISSION_GRANTED);
+        // upgrade to apk with perm signature
+        installFromRawResource("permUse2.apk", R.raw.keyset_permuse_sa_ua_ub,
+                PackageManager.INSTALL_REPLACE_EXISTING, false, false, -1,
+                PackageInfo.INSTALL_LOCATION_UNSPECIFIED);
+        assertTrue("keyset permission not granted to app after upgrade to same sig",
+                    pm.checkPermission(permName, pkgName)
+                    == PackageManager.PERMISSION_GRANTED);
+        cleanUpInstall(permPkgName);
+        cleanUpInstall(pkgName);
+    }
+
+    /*
+     * Check if an apk loses signature-level permission after changing to the a
+     * new signature, from one which a permission should be granted.
+     */
+    public void testUpgradeSigPermLost() throws Exception {
+        // install apk which defines permission
+        installFromRawResource("permDef.apk", R.raw.keyset_permdef_sa_unone,
+                0, false, false, -1, PackageInfo.INSTALL_LOCATION_UNSPECIFIED);
+        // install apk which uses permission, signed by same sig
+        installFromRawResource("permUse.apk", R.raw.keyset_permuse_sa_ua_ub,
+                0, false, false, -1, PackageInfo.INSTALL_LOCATION_UNSPECIFIED);
+        // verify that package does not have perm before
+        PackageManager pm = getPm();
+        String permPkgName = "com.android.frameworks.coretests.keysets_permdef";
+        String pkgName = "com.android.frameworks.coretests.keysets";
+        String permName = "com.android.frameworks.coretests.keysets_permdef.keyset_perm";
+        assertTrue("keyset permission not granted to app with same sig",
+                    pm.checkPermission(permName, pkgName)
+                    == PackageManager.PERMISSION_GRANTED);
+        // upgrade to apk without perm signature
+        installFromRawResource("permUse2.apk", R.raw.keyset_permuse_sb_ua_ub,
+                PackageManager.INSTALL_REPLACE_EXISTING, false, false, -1,
+                PackageInfo.INSTALL_LOCATION_UNSPECIFIED);
+
+        assertFalse("keyset permission not revoked from app which upgraded to a "
+                    + "different signature",
+                    pm.checkPermission(permName, pkgName)
+                    == PackageManager.PERMISSION_GRANTED);
+        cleanUpInstall(permPkgName);
+        cleanUpInstall(pkgName);
+    }
+
+    /**
+     * The following tests are related to testing KeySets-based API
+     */
+
+    /*
+     * testGetSigningKeySetNull - ensure getSigningKeySet() returns null on null
+     * input and when calling a package other than that which made the call.
+     */
+    public void testGetSigningKeySet() throws Exception {
+        PackageManager pm = getPm();
+        String mPkgName = mContext.getPackageName();
+        String otherPkgName = "com.android.frameworks.coretests.keysets_api";
+        KeySet ks;
+        try {
+            ks = pm.getSigningKeySet(null);
+            assertTrue(false); // should have thrown
+        } catch (NullPointerException e) {
+        }
+        try {
+            ks = pm.getSigningKeySet("keysets.test.bogus.package");
+            assertTrue(false); // should have thrown
+        } catch (IllegalArgumentException e) {
+        }
+        installFromRawResource("keysetApi.apk", R.raw.keyset_splat_api,
+                0, false, false, -1, PackageInfo.INSTALL_LOCATION_UNSPECIFIED);
+        try {
+            ks = pm.getSigningKeySet(otherPkgName);
+            assertTrue(false); // should have thrown
+        } catch (SecurityException e) {
+        }
+        cleanUpInstall(otherPkgName);
+        ks = pm.getSigningKeySet(mContext.getPackageName());
+        assertNotNull(ks);
+    }
+
+    /*
+     * testGetKeySetByAlias - same as getSigningKeySet, but for keysets defined
+     * by this package.
+     */
+    public void testGetKeySetByAlias() throws Exception {
+        PackageManager pm = getPm();
+        String mPkgName = mContext.getPackageName();
+        String otherPkgName = "com.android.frameworks.coretests.keysets_api";
+        KeySet ks;
+        try {
+            ks = pm.getKeySetByAlias(null, null);
+            assertTrue(false); // should have thrown
+        } catch (NullPointerException e) {
+        }
+        try {
+            ks = pm.getKeySetByAlias(null, "keysetBogus");
+            assertTrue(false); // should have thrown
+        } catch (NullPointerException e) {
+        }
+        try {
+            ks = pm.getKeySetByAlias("keysets.test.bogus.package", null);
+            assertTrue(false); // should have thrown
+        } catch (NullPointerException e) {
+        }
+        try {
+            ks = pm.getKeySetByAlias("keysets.test.bogus.package", "A");
+            assertTrue(false); // should have thrown
+        } catch(IllegalArgumentException e) {
+        }
+        try {
+            ks = pm.getKeySetByAlias(mPkgName, "keysetBogus");
+            assertTrue(false); // should have thrown
+        } catch(IllegalArgumentException e) {
+        }
+        installFromRawResource("keysetApi.apk", R.raw.keyset_splat_api,
+                0, false, false, -1, PackageInfo.INSTALL_LOCATION_UNSPECIFIED);
+        try {
+            ks = pm.getKeySetByAlias(otherPkgName, "A");
+            assertTrue(false); // should have thrown
+        } catch (SecurityException e) {
+        }
+        cleanUpInstall(otherPkgName);
+        ks = pm.getKeySetByAlias(mPkgName, "A");
+        assertNotNull(ks);
+    }
+
+    public void testIsSignedBy() throws Exception {
+        PackageManager pm = getPm();
+        String mPkgName = mContext.getPackageName();
+        String otherPkgName = "com.android.frameworks.coretests.keysets_api";
+        KeySet mSigningKS = pm.getSigningKeySet(mPkgName);
+        KeySet mDefinedKS = pm.getKeySetByAlias(mPkgName, "A");
+
+        try {
+            assertFalse(pm.isSignedBy(null, null));
+            assertTrue(false); // should have thrown
+        } catch (NullPointerException e) {
+        }
+        try {
+            assertFalse(pm.isSignedBy(null, mSigningKS));
+            assertTrue(false); // should have thrown
+        } catch (NullPointerException e) {
+        }
+        try {
+            assertFalse(pm.isSignedBy(mPkgName, null));
+            assertTrue(false); // should have thrown
+        } catch (NullPointerException e) {
+        }
+        try {
+            assertFalse(pm.isSignedBy("keysets.test.bogus.package", mDefinedKS));
+        } catch(IllegalArgumentException e) {
+        }
+        assertFalse(pm.isSignedBy(mPkgName, mDefinedKS));
+        assertFalse(pm.isSignedBy(mPkgName, new KeySet(new Binder())));
+        assertTrue(pm.isSignedBy(mPkgName, mSigningKS));
+
+        installFromRawResource("keysetApi.apk", R.raw.keyset_splat_api,
+                0, false, false, -1, PackageInfo.INSTALL_LOCATION_UNSPECIFIED);
+        assertFalse(pm.isSignedBy(otherPkgName, mDefinedKS));
+        assertTrue(pm.isSignedBy(otherPkgName, mSigningKS));
+        cleanUpInstall(otherPkgName);
+
+        installFromRawResource("keysetApi.apk", R.raw.keyset_splata_api,
+                0, false, false, -1, PackageInfo.INSTALL_LOCATION_UNSPECIFIED);
+        assertTrue(pm.isSignedBy(otherPkgName, mDefinedKS));
+        assertTrue(pm.isSignedBy(otherPkgName, mSigningKS));
+        cleanUpInstall(otherPkgName);
+    }
+
+    public void testIsSignedByExactly() throws Exception {
+        PackageManager pm = getPm();
+        String mPkgName = mContext.getPackageName();
+        String otherPkgName = "com.android.frameworks.coretests.keysets_api";
+        KeySet mSigningKS = pm.getSigningKeySet(mPkgName);
+        KeySet mDefinedKS = pm.getKeySetByAlias(mPkgName, "A");
+        try {
+            assertFalse(pm.isSignedBy(null, null));
+            assertTrue(false); // should have thrown
+        } catch (NullPointerException e) {
+        }
+        try {
+            assertFalse(pm.isSignedBy(null, mSigningKS));
+            assertTrue(false); // should have thrown
+        } catch (NullPointerException e) {
+        }
+        try {
+            assertFalse(pm.isSignedBy(mPkgName, null));
+            assertTrue(false); // should have thrown
+        } catch (NullPointerException e) {
+        }
+        try {
+            assertFalse(pm.isSignedByExactly("keysets.test.bogus.package", mDefinedKS));
+        } catch(IllegalArgumentException e) {
+        }
+        assertFalse(pm.isSignedByExactly(mPkgName, mDefinedKS));
+        assertFalse(pm.isSignedByExactly(mPkgName, new KeySet(new Binder())));
+        assertTrue(pm.isSignedByExactly(mPkgName, mSigningKS));
+
+        installFromRawResource("keysetApi.apk", R.raw.keyset_splat_api,
+                0, false, false, -1, PackageInfo.INSTALL_LOCATION_UNSPECIFIED);
+        assertFalse(pm.isSignedByExactly(otherPkgName, mDefinedKS));
+        assertTrue(pm.isSignedByExactly(otherPkgName, mSigningKS));
+        cleanUpInstall(otherPkgName);
+
+        installFromRawResource("keysetApi.apk", R.raw.keyset_splata_api,
+                0, false, false, -1, PackageInfo.INSTALL_LOCATION_UNSPECIFIED);
+        assertFalse(pm.isSignedByExactly(otherPkgName, mDefinedKS));
+        assertFalse(pm.isSignedByExactly(otherPkgName, mSigningKS));
+        cleanUpInstall(otherPkgName);
+    }
+
+
 
     /**
      * The following tests are related to testing the checkSignatures api.
@@ -3303,7 +3742,7 @@ public class PackageManagerTests extends AndroidTestCase {
         int apk2 = SHARED2_CERT1_CERT2;
         int rapk1 = SHARED1_CERT1;
         boolean fail = true;
-        int retCode = PackageManager.INSTALL_PARSE_FAILED_INCONSISTENT_CERTIFICATES;
+        int retCode = PackageManager.INSTALL_FAILED_UPDATE_INCOMPATIBLE;
         checkSharedSignatures(apk1, apk2, false, false, -1, PackageManager.SIGNATURE_MATCH);
         installFromRawResource("install.apk", rapk1, PackageManager.INSTALL_REPLACE_EXISTING, true,
                 fail, retCode, PackageInfo.INSTALL_LOCATION_UNSPECIFIED);
@@ -3315,7 +3754,7 @@ public class PackageManagerTests extends AndroidTestCase {
         int apk2 = SHARED2_CERT1_CERT2;
         int rapk2 = SHARED2_CERT1;
         boolean fail = true;
-        int retCode = PackageManager.INSTALL_PARSE_FAILED_INCONSISTENT_CERTIFICATES;
+        int retCode = PackageManager.INSTALL_FAILED_UPDATE_INCOMPATIBLE;
         checkSharedSignatures(apk1, apk2, false, false, -1, PackageManager.SIGNATURE_MATCH);
         installFromRawResource("install.apk", rapk2, PackageManager.INSTALL_REPLACE_EXISTING, true,
                 fail, retCode, PackageInfo.INSTALL_LOCATION_UNSPECIFIED);
@@ -3327,7 +3766,7 @@ public class PackageManagerTests extends AndroidTestCase {
         int apk2 = SHARED2_CERT1;
         int rapk1 = SHARED1_CERT2;
         boolean fail = true;
-        int retCode = PackageManager.INSTALL_PARSE_FAILED_INCONSISTENT_CERTIFICATES;
+        int retCode = PackageManager.INSTALL_FAILED_UPDATE_INCOMPATIBLE;
         checkSharedSignatures(apk1, apk2, false, false, -1, PackageManager.SIGNATURE_MATCH);
         installFromRawResource("install.apk", rapk1, PackageManager.INSTALL_REPLACE_EXISTING, true,
                 fail, retCode, PackageInfo.INSTALL_LOCATION_UNSPECIFIED);
@@ -3339,7 +3778,7 @@ public class PackageManagerTests extends AndroidTestCase {
         int apk2 = SHARED2_CERT1;
         int rapk2 = SHARED2_CERT2;
         boolean fail = true;
-        int retCode = PackageManager.INSTALL_PARSE_FAILED_INCONSISTENT_CERTIFICATES;
+        int retCode = PackageManager.INSTALL_FAILED_UPDATE_INCOMPATIBLE;
         checkSharedSignatures(apk1, apk2, false, false, -1, PackageManager.SIGNATURE_MATCH);
         installFromRawResource("install.apk", rapk2, PackageManager.INSTALL_REPLACE_EXISTING, true,
                 fail, retCode, PackageInfo.INSTALL_LOCATION_UNSPECIFIED);
@@ -3351,7 +3790,7 @@ public class PackageManagerTests extends AndroidTestCase {
         int apk2 = SHARED2_CERT1;
         int rapk1 = SHARED1_CERT1_CERT2;
         boolean fail = true;
-        int retCode = PackageManager.INSTALL_PARSE_FAILED_INCONSISTENT_CERTIFICATES;
+        int retCode = PackageManager.INSTALL_FAILED_UPDATE_INCOMPATIBLE;
         checkSharedSignatures(apk1, apk2, false, false, -1, PackageManager.SIGNATURE_MATCH);
         installFromRawResource("install.apk", rapk1, PackageManager.INSTALL_REPLACE_EXISTING, true,
                 fail, retCode, PackageInfo.INSTALL_LOCATION_UNSPECIFIED);
@@ -3363,7 +3802,7 @@ public class PackageManagerTests extends AndroidTestCase {
         int apk2 = SHARED2_CERT1;
         int rapk2 = SHARED2_CERT1_CERT2;
         boolean fail = true;
-        int retCode = PackageManager.INSTALL_PARSE_FAILED_INCONSISTENT_CERTIFICATES;
+        int retCode = PackageManager.INSTALL_FAILED_UPDATE_INCOMPATIBLE;
         checkSharedSignatures(apk1, apk2, false, false, -1, PackageManager.SIGNATURE_MATCH);
         installFromRawResource("install.apk", rapk2, PackageManager.INSTALL_REPLACE_EXISTING, true,
                 fail, retCode, PackageInfo.INSTALL_LOCATION_UNSPECIFIED);

@@ -21,6 +21,7 @@
 
 #include "android_os_Parcel.h"
 #include "android_view_GraphicBuffer.h"
+#include "android/graphics/GraphicsJNI.h"
 
 #include <android_runtime/AndroidRuntime.h>
 
@@ -37,6 +38,8 @@
 
 #include <private/gui/ComposerService.h>
 
+#include "core_jni_helpers.h"
+
 namespace android {
 
 // ----------------------------------------------------------------------------
@@ -44,16 +47,7 @@ namespace android {
 // ----------------------------------------------------------------------------
 
 // Debug
-#define DEBUG_GRAPHIC_BUFFER 0
-
-// Debug
-#if DEBUG_GRAPHIC_BUFFER
-    #define GB_LOGD(...) ALOGD(__VA_ARGS__)
-    #define GB_LOGW(...) ALOGW(__VA_ARGS__)
-#else
-    #define GB_LOGD(...)
-    #define GB_LOGW(...)
-#endif
+static const bool kDebugGraphicBuffer = false;
 
 #define LOCK_CANVAS_USAGE GraphicBuffer::USAGE_SW_READ_OFTEN | GraphicBuffer::USAGE_SW_WRITE_OFTEN
 
@@ -74,14 +68,9 @@ static struct {
 } gRectClassInfo;
 
 static struct {
-    jfieldID mFinalizer;
-    jfieldID mNativeCanvas;
     jfieldID mSurfaceFormat;
+    jmethodID setNativeBitmap;
 } gCanvasClassInfo;
-
-static struct {
-    jfieldID mNativeCanvas;
-} gCanvasFinalizerClassInfo;
 
 #define GET_INT(object, field) \
     env->GetIntField(object, field)
@@ -120,14 +109,18 @@ static jlong android_view_GraphiceBuffer_create(JNIEnv* env, jobject clazz,
     sp<ISurfaceComposer> composer(ComposerService::getComposerService());
     sp<IGraphicBufferAlloc> alloc(composer->createGraphicBufferAlloc());
     if (alloc == NULL) {
-        GB_LOGW("createGraphicBufferAlloc() failed in GraphicBuffer.create()");
+        if (kDebugGraphicBuffer) {
+            ALOGW("createGraphicBufferAlloc() failed in GraphicBuffer.create()");
+        }
         return NULL;
     }
 
     status_t error;
     sp<GraphicBuffer> buffer(alloc->createGraphicBuffer(width, height, format, usage, &error));
     if (buffer == NULL) {
-        GB_LOGW("createGraphicBuffer() failed in GraphicBuffer.create()");
+        if (kDebugGraphicBuffer) {
+            ALOGW("createGraphicBuffer() failed in GraphicBuffer.create()");
+        }
         return NULL;
     }
 
@@ -146,25 +139,16 @@ static void android_view_GraphiceBuffer_destroy(JNIEnv* env, jobject clazz,
 // Canvas management
 // ----------------------------------------------------------------------------
 
-static inline void swapCanvasPtr(JNIEnv* env, jobject canvasObj, SkCanvas* newCanvas) {
-    jobject canvasFinalizerObj = env->GetObjectField(canvasObj, gCanvasClassInfo.mFinalizer);
-    SkCanvas* previousCanvas = reinterpret_cast<SkCanvas*>(
-            GET_LONG(canvasObj, gCanvasClassInfo.mNativeCanvas));
-    SET_LONG(canvasObj, gCanvasClassInfo.mNativeCanvas, (long) newCanvas);
-    SET_LONG(canvasFinalizerObj, gCanvasFinalizerClassInfo.mNativeCanvas, (long) newCanvas);
-    SkSafeUnref(previousCanvas);
-}
-
-static inline SkBitmap::Config convertPixelFormat(int32_t format) {
+static inline SkColorType convertPixelFormat(int32_t format) {
     switch (format) {
         case PIXEL_FORMAT_RGBA_8888:
-            return SkBitmap::kARGB_8888_Config;
+            return kN32_SkColorType;
         case PIXEL_FORMAT_RGBX_8888:
-            return SkBitmap::kARGB_8888_Config;
+            return kN32_SkColorType;
         case PIXEL_FORMAT_RGB_565:
-            return SkBitmap::kRGB_565_Config;
+            return kRGB_565_SkColorType;
         default:
-            return SkBitmap::kNo_Config;
+            return kUnknown_SkColorType;
     }
 }
 
@@ -201,8 +185,10 @@ static jboolean android_view_GraphicBuffer_lockCanvas(JNIEnv* env, jobject,
     ssize_t bytesCount = buffer->getStride() * bytesPerPixel(buffer->getPixelFormat());
 
     SkBitmap bitmap;
-    bitmap.setConfig(convertPixelFormat(buffer->getPixelFormat()),
-            buffer->getWidth(), buffer->getHeight(), bytesCount);
+    bitmap.setInfo(SkImageInfo::Make(buffer->getWidth(), buffer->getHeight(),
+                                     convertPixelFormat(buffer->getPixelFormat()),
+                                     kPremul_SkAlphaType),
+                   bytesCount);
 
     if (buffer->getWidth() > 0 && buffer->getHeight() > 0) {
         bitmap.setPixels(bits);
@@ -211,12 +197,11 @@ static jboolean android_view_GraphicBuffer_lockCanvas(JNIEnv* env, jobject,
     }
 
     SET_INT(canvas, gCanvasClassInfo.mSurfaceFormat, buffer->getPixelFormat());
-
-    SkCanvas* nativeCanvas = SkNEW_ARGS(SkCanvas, (bitmap));
-    swapCanvasPtr(env, canvas, nativeCanvas);
+    INVOKEV(canvas, gCanvasClassInfo.setNativeBitmap, reinterpret_cast<jlong>(&bitmap));
 
     SkRect clipRect;
     clipRect.set(rect.left, rect.top, rect.right, rect.bottom);
+    SkCanvas* nativeCanvas = GraphicsJNI::getNativeCanvas(env, canvas);
     nativeCanvas->clipRect(clipRect);
 
     if (dirtyRect) {
@@ -232,8 +217,7 @@ static jboolean android_view_GraphicBuffer_unlockCanvasAndPost(JNIEnv* env, jobj
 
     GraphicBufferWrapper* wrapper =
                 reinterpret_cast<GraphicBufferWrapper*>(wrapperHandle);
-    SkCanvas* nativeCanvas = SkNEW(SkCanvas);
-    swapCanvasPtr(env, canvas, nativeCanvas);
+    INVOKEV(canvas, gCanvasClassInfo.setNativeBitmap, (jlong)0);
 
     if (wrapper) {
         status_t status = wrapper->buffer->unlock();
@@ -290,18 +274,6 @@ sp<GraphicBuffer> graphicBufferForJavaObject(JNIEnv* env, jobject obj) {
 // JNI Glue
 // ----------------------------------------------------------------------------
 
-#define FIND_CLASS(var, className) \
-        var = env->FindClass(className); \
-        LOG_FATAL_IF(! var, "Unable to find class " className);
-
-#define GET_FIELD_ID(var, clazz, fieldName, fieldDescriptor) \
-        var = env->GetFieldID(clazz, fieldName, fieldDescriptor); \
-        LOG_FATAL_IF(! var, "Unable to find field " fieldName);
-
-#define GET_METHOD_ID(var, clazz, methodName, methodDescriptor) \
-        var = env->GetMethodID(clazz, methodName, methodDescriptor); \
-        LOG_FATAL_IF(!var, "Unable to find method " methodName);
-
 const char* const kClassPathName = "android/view/GraphicBuffer";
 
 static JNINativeMethod gMethods[] = {
@@ -320,27 +292,21 @@ static JNINativeMethod gMethods[] = {
 };
 
 int register_android_view_GraphicBuffer(JNIEnv* env) {
-    jclass clazz;
-    FIND_CLASS(clazz, "android/view/GraphicBuffer");
-    GET_FIELD_ID(gGraphicBufferClassInfo.mNativeObject, clazz, "mNativeObject", "J");
+    jclass clazz = FindClassOrDie(env, "android/view/GraphicBuffer");
+    gGraphicBufferClassInfo.mNativeObject = GetFieldIDOrDie(env, clazz, "mNativeObject", "J");
 
-    FIND_CLASS(clazz, "android/graphics/Rect");
-    GET_METHOD_ID(gRectClassInfo.set, clazz, "set", "(IIII)V");
-    GET_FIELD_ID(gRectClassInfo.left, clazz, "left", "I");
-    GET_FIELD_ID(gRectClassInfo.top, clazz, "top", "I");
-    GET_FIELD_ID(gRectClassInfo.right, clazz, "right", "I");
-    GET_FIELD_ID(gRectClassInfo.bottom, clazz, "bottom", "I");
+    clazz = FindClassOrDie(env, "android/graphics/Rect");
+    gRectClassInfo.set = GetMethodIDOrDie(env, clazz, "set", "(IIII)V");
+    gRectClassInfo.left = GetFieldIDOrDie(env, clazz, "left", "I");
+    gRectClassInfo.top = GetFieldIDOrDie(env, clazz, "top", "I");
+    gRectClassInfo.right = GetFieldIDOrDie(env, clazz, "right", "I");
+    gRectClassInfo.bottom = GetFieldIDOrDie(env, clazz, "bottom", "I");
 
-    FIND_CLASS(clazz, "android/graphics/Canvas");
-    GET_FIELD_ID(gCanvasClassInfo.mFinalizer, clazz, "mFinalizer",
-            "Landroid/graphics/Canvas$CanvasFinalizer;");
-    GET_FIELD_ID(gCanvasClassInfo.mNativeCanvas, clazz, "mNativeCanvas", "J");
-    GET_FIELD_ID(gCanvasClassInfo.mSurfaceFormat, clazz, "mSurfaceFormat", "I");
+    clazz = FindClassOrDie(env, "android/graphics/Canvas");
+    gCanvasClassInfo.mSurfaceFormat = GetFieldIDOrDie(env, clazz, "mSurfaceFormat", "I");
+    gCanvasClassInfo.setNativeBitmap = GetMethodIDOrDie(env, clazz, "setNativeBitmap", "(J)V");
 
-    FIND_CLASS(clazz, "android/graphics/Canvas$CanvasFinalizer");
-    GET_FIELD_ID(gCanvasFinalizerClassInfo.mNativeCanvas, clazz, "mNativeCanvas", "J");
-
-    return AndroidRuntime::registerNativeMethods(env, kClassPathName, gMethods, NELEM(gMethods));
+    return RegisterMethodsOrDie(env, kClassPathName, gMethods, NELEM(gMethods));
 }
 
 };

@@ -1,6 +1,7 @@
 
 #include "aidl_language.h"
 #include "options.h"
+#include "os.h"
 #include "search_path.h"
 #include "Type.h"
 #include "generate_java.h"
@@ -16,6 +17,7 @@
 
 #ifdef HAVE_MS_C_RUNTIME
 #include <io.h>
+#include <direct.h>
 #include <sys/stat.h>
 #endif
 
@@ -176,7 +178,7 @@ check_filename(const char* filename, const char* package, buffer_type* name)
     char cwd[MAXPATHLEN];
     bool valid = false;
 
-#ifdef HAVE_WINDOWS_PATHS
+#ifdef _WIN32
     if (isalpha(filename[0]) && filename[1] == ':'
         && filename[2] == OS_PATH_SEPARATOR) {
 #else
@@ -207,7 +209,7 @@ check_filename(const char* filename, const char* package, buffer_type* name)
     p = strchr(name->data, '.');
     len = p ? p-name->data : strlen(name->data);
     expected.append(name->data, len);
-
+    
     expected += ".aidl";
 
     len = fn.length();
@@ -216,7 +218,7 @@ check_filename(const char* filename, const char* package, buffer_type* name)
     if (valid) {
         p = fn.c_str() + (len - expected.length());
 
-#ifdef HAVE_WINDOWS_PATHS
+#ifdef _WIN32
         if (OS_PATH_SEPARATOR != '/') {
             // Input filename under cygwin most likely has / separators
             // whereas the expected string uses \\ separators. Adjust
@@ -227,7 +229,8 @@ check_filename(const char* filename, const char* package, buffer_type* name)
         }
 #endif
 
-#ifdef OS_CASE_SENSITIVE
+        // aidl assumes case-insensitivity on Mac Os and Windows.
+#if defined(__linux__)
         valid = (expected == p);
 #else
         valid = !strcasecmp(expected.c_str(), p);
@@ -473,7 +476,7 @@ check_method(const char* filename, int kind, method_type* m)
             err = 1;
             goto next;
         }
-
+        
         if (!(kind == INTERFACE_TYPE_BINDER ? t->CanWriteToParcel() : t->CanWriteToRpcData())) {
             fprintf(stderr, "%s:%d parameter %d: '%s %s' can't be marshalled.\n",
                         filename, m->type.type.lineno, index,
@@ -536,7 +539,7 @@ check_method(const char* filename, int kind, method_type* m)
                     filename, m->name.lineno, index, arg->name.data);
             err = 1;
         }
-
+        
 next:
         index++;
         arg = arg->next;
@@ -673,6 +676,10 @@ generate_dep_file(const Options& options, const document_item_type* items)
 
     fprintf(to, "\n");
 
+    // Output "<input_aidl_file>: " so make won't fail if the input .aidl file
+    // has been deleted, moved or renamed in incremental build.
+    fprintf(to, "%s :\n", options.inputFileName.c_str());
+
     // Output "<imported_file>: " so make won't fail if the imported file has
     // been deleted, moved or renamed in incremental build.
     import = g_imports;
@@ -797,7 +804,7 @@ parse_preprocessed_file(const string& filename)
         //printf("%s:%d:...%s...%s...%s...\n", filename.c_str(), lineno,
         //        type, packagename, classname);
         document_item_type* doc;
-
+        
         if (0 == strcmp("parcelable", type)) {
             user_data_type* parcl = (user_data_type*)malloc(
                     sizeof(user_data_type));
@@ -1104,13 +1111,13 @@ preprocess_aidl(const Options& options)
     }
 
     // write preprocessed file
-    int fd = open( options.outputFileName.c_str(),
+    int fd = open( options.outputFileName.c_str(), 
                    O_RDWR|O_CREAT|O_TRUNC|O_BINARY,
 #ifdef HAVE_MS_C_RUNTIME
                    _S_IREAD|_S_IWRITE);
-#else
+#else    
                    S_IRUSR|S_IWUSR|S_IRGRP);
-#endif
+#endif            
     if (fd == -1) {
         fprintf(stderr, "aidl: could not open file for write: %s\n",
                 options.outputFileName.c_str());

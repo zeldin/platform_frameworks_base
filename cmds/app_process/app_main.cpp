@@ -7,6 +7,12 @@
 
 #define LOG_TAG "appproc"
 
+#include <stdio.h>
+#include <stdlib.h>
+#include <sys/prctl.h>
+#include <sys/stat.h>
+#include <unistd.h>
+
 #include <binder/IPCThreadState.h>
 #include <binder/ProcessState.h>
 #include <utils/Log.h>
@@ -17,14 +23,9 @@
 #include <android_runtime/AndroidRuntime.h>
 #include <private/android_filesystem_config.h>  // for AID_SYSTEM
 
-#include <stdlib.h>
-#include <stdio.h>
-#include <unistd.h>
-#include <sys/prctl.h>
-
 namespace android {
 
-void app_usage()
+static void app_usage()
 {
     fprintf(stderr,
         "Usage: app_process [java-options] cmd-dir start-class-name [options]\n");
@@ -133,8 +134,7 @@ static size_t computeArgBlockSize(int argc, char* const argv[]) {
     // names if the zygote command line decreases in size.
     uintptr_t start = reinterpret_cast<uintptr_t>(argv[0]);
     uintptr_t end = reinterpret_cast<uintptr_t>(argv[argc - 1]);
-    end += strlen(argv[argc - 1]);
-
+    end += strlen(argv[argc - 1]) + 1;
     return (end - start);
 }
 
@@ -147,8 +147,10 @@ static void maybeCreateDalvikCache() {
     static const char kInstructionSet[] = "arm";
 #elif defined(__i386__)
     static const char kInstructionSet[] = "x86";
-#elif defined (__mips__)
+#elif defined (__mips__) && !defined(__LP64__)
     static const char kInstructionSet[] = "mips";
+#elif defined (__mips__) && defined(__LP64__)
+    static const char kInstructionSet[] = "mips64";
 #else
 #error "Unknown instruction set"
 #endif
@@ -220,15 +222,27 @@ int main(int argc, char* const argv[])
     //
     // For zygote starts, all remaining arguments are passed to the zygote.
     // main function.
+    //
+    // Note that we must copy argument string values since we will rewrite the
+    // entire argument block when we apply the nice name to argv0.
 
-
-    int i = runtime.addVmArguments(argc, argv);
+    int i;
+    for (i = 0; i < argc; i++) {
+        if (argv[i][0] != '-') {
+            break;
+        }
+        if (argv[i][1] == '-' && argv[i][2] == 0) {
+            ++i; // Skip --.
+            break;
+        }
+        runtime.addOption(strdup(argv[i]));
+    }
 
     // Parse runtime arguments.  Stop at first unrecognized option.
     bool zygote = false;
     bool startSystemServer = false;
     bool application = false;
-    const char* niceName = NULL;
+    String8 niceName;
     String8 className;
 
     ++i;  // Skip unused "parent dir" argument.
@@ -242,7 +256,7 @@ int main(int argc, char* const argv[])
         } else if (strcmp(arg, "--application") == 0) {
             application = true;
         } else if (strncmp(arg, "--nice-name=", 12) == 0) {
-            niceName = arg + 12;
+            niceName.setTo(arg + 12);
         } else if (strncmp(arg, "--", 2) != 0) {
             className.setTo(arg);
             break;
@@ -287,9 +301,9 @@ int main(int argc, char* const argv[])
         }
     }
 
-    if (niceName && *niceName) {
-        runtime.setArgv0(niceName);
-        set_process_name(niceName);
+    if (!niceName.isEmpty()) {
+        runtime.setArgv0(niceName.string());
+        set_process_name(niceName.string());
     }
 
     if (zygote) {

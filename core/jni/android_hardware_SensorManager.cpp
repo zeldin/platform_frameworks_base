@@ -28,6 +28,8 @@
 #include "android_os_MessageQueue.h"
 #include <android_runtime/AndroidRuntime.h>
 
+#include "core_jni_helpers.h"
+
 static struct {
     jclass clazz;
     jmethodID dispatchSensorEvent;
@@ -49,6 +51,10 @@ struct SensorOffsets
     jfieldID    minDelay;
     jfieldID    fifoReservedEventCount;
     jfieldID    fifoMaxEventCount;
+    jfieldID    stringType;
+    jfieldID    requiredPermission;
+    jfieldID    maxDelay;
+    jfieldID    flags;
 } gSensorOffsets;
 
 
@@ -73,6 +79,11 @@ nativeClassInit (JNIEnv *_env, jclass _this)
     sensorOffsets.fifoReservedEventCount =
             _env->GetFieldID(sensorClass, "mFifoReservedEventCount",  "I");
     sensorOffsets.fifoMaxEventCount = _env->GetFieldID(sensorClass, "mFifoMaxEventCount",  "I");
+    sensorOffsets.stringType = _env->GetFieldID(sensorClass, "mStringType", "Ljava/lang/String;");
+    sensorOffsets.requiredPermission = _env->GetFieldID(sensorClass, "mRequiredPermission",
+                                                        "Ljava/lang/String;");
+    sensorOffsets.maxDelay    = _env->GetFieldID(sensorClass, "mMaxDelay",  "I");
+    sensorOffsets.flags = _env->GetFieldID(sensorClass, "mFlags",  "I");
 }
 
 static jint
@@ -89,6 +100,8 @@ nativeGetNextSensor(JNIEnv *env, jclass clazz, jobject sensor, jint next)
     const SensorOffsets& sensorOffsets(gSensorOffsets);
     jstring name = env->NewStringUTF(list->getName().string());
     jstring vendor = env->NewStringUTF(list->getVendor().string());
+    jstring stringType = env->NewStringUTF(list->getStringType().string());
+    jstring requiredPermission = env->NewStringUTF(list->getRequiredPermission().string());
     env->SetObjectField(sensor, sensorOffsets.name,      name);
     env->SetObjectField(sensor, sensorOffsets.vendor,    vendor);
     env->SetIntField(sensor, sensorOffsets.version,      list->getVersion());
@@ -100,7 +113,13 @@ nativeGetNextSensor(JNIEnv *env, jclass clazz, jobject sensor, jint next)
     env->SetIntField(sensor, sensorOffsets.minDelay,     list->getMinDelay());
     env->SetIntField(sensor, sensorOffsets.fifoReservedEventCount,
                      list->getFifoReservedEventCount());
-    env->SetIntField(sensor, sensorOffsets.fifoMaxEventCount, list->getFifoMaxEventCount());
+    env->SetIntField(sensor, sensorOffsets.fifoMaxEventCount,
+                     list->getFifoMaxEventCount());
+    env->SetObjectField(sensor, sensorOffsets.stringType, stringType);
+    env->SetObjectField(sensor, sensorOffsets.requiredPermission,
+                        requiredPermission);
+    env->SetIntField(sensor, sensorOffsets.maxDelay, list->getMaxDelay());
+    env->SetIntField(sensor, sensorOffsets.flags, list->getFlags());
     next++;
     return size_t(next) < count ? next : 0;
 }
@@ -149,7 +168,6 @@ private:
         ASensorEvent buffer[16];
         while ((n = q->read(buffer, 16)) > 0) {
             for (int i=0 ; i<n ; i++) {
-
                 if (buffer[i].type == SENSOR_TYPE_STEP_COUNTER) {
                     // step-counter returns a uint64, but the java API only deals with floats
                     float value = float(buffer[i].u64.step_counter);
@@ -165,24 +183,39 @@ private:
                                         gBaseEventQueueClassInfo.dispatchFlushCompleteEvent,
                                         buffer[i].meta_data.sensor);
                 } else {
+                    int8_t status;
+                    switch (buffer[i].type) {
+                    case SENSOR_TYPE_ORIENTATION:
+                    case SENSOR_TYPE_MAGNETIC_FIELD:
+                    case SENSOR_TYPE_ACCELEROMETER:
+                    case SENSOR_TYPE_GYROSCOPE:
+                        status = buffer[i].vector.status;
+                        break;
+                    case SENSOR_TYPE_HEART_RATE:
+                        status = buffer[i].heart_rate.status;
+                        break;
+                    default:
+                        status = SENSOR_STATUS_ACCURACY_HIGH;
+                        break;
+                    }
                     env->CallVoidMethod(mReceiverObject,
                                         gBaseEventQueueClassInfo.dispatchSensorEvent,
                                         buffer[i].sensor,
                                         mScratch,
-                                        buffer[i].vector.status,
+                                        status,
                                         buffer[i].timestamp);
                 }
-
                 if (env->ExceptionCheck()) {
+                    mSensorQueue->sendAck(buffer, n);
                     ALOGE("Exception dispatching input event.");
                     return 1;
                 }
             }
+            mSensorQueue->sendAck(buffer, n);
         }
         if (n<0 && n != -EAGAIN) {
             // FIXME: error receiving events, what to do in this case?
         }
-
         return 1;
     }
 };
@@ -263,32 +296,22 @@ static JNINativeMethod gBaseEventQueueMethods[] = {
 
 using namespace android;
 
-#define FIND_CLASS(var, className) \
-        var = env->FindClass(className); \
-        LOG_FATAL_IF(! var, "Unable to find class " className); \
-        var = jclass(env->NewGlobalRef(var));
-
-#define GET_METHOD_ID(var, clazz, methodName, methodDescriptor) \
-        var = env->GetMethodID(clazz, methodName, methodDescriptor); \
-        LOG_FATAL_IF(! var, "Unable to find method " methodName);
-
 int register_android_hardware_SensorManager(JNIEnv *env)
 {
-    jniRegisterNativeMethods(env, "android/hardware/SystemSensorManager",
+    RegisterMethodsOrDie(env, "android/hardware/SystemSensorManager",
             gSystemSensorManagerMethods, NELEM(gSystemSensorManagerMethods));
 
-    jniRegisterNativeMethods(env, "android/hardware/SystemSensorManager$BaseEventQueue",
+    RegisterMethodsOrDie(env, "android/hardware/SystemSensorManager$BaseEventQueue",
             gBaseEventQueueMethods, NELEM(gBaseEventQueueMethods));
 
-    FIND_CLASS(gBaseEventQueueClassInfo.clazz, "android/hardware/SystemSensorManager$BaseEventQueue");
+    gBaseEventQueueClassInfo.clazz = FindClassOrDie(env,
+            "android/hardware/SystemSensorManager$BaseEventQueue");
 
-    GET_METHOD_ID(gBaseEventQueueClassInfo.dispatchSensorEvent,
-            gBaseEventQueueClassInfo.clazz,
-            "dispatchSensorEvent", "(I[FIJ)V");
+    gBaseEventQueueClassInfo.dispatchSensorEvent = GetMethodIDOrDie(env,
+            gBaseEventQueueClassInfo.clazz, "dispatchSensorEvent", "(I[FIJ)V");
 
-    GET_METHOD_ID(gBaseEventQueueClassInfo.dispatchFlushCompleteEvent,
-                  gBaseEventQueueClassInfo.clazz,
-                  "dispatchFlushCompleteEvent", "(I)V");
+    gBaseEventQueueClassInfo.dispatchFlushCompleteEvent = GetMethodIDOrDie(env,
+            gBaseEventQueueClassInfo.clazz, "dispatchFlushCompleteEvent", "(I)V");
 
     return 0;
 }

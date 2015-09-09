@@ -22,9 +22,9 @@ import android.content.Intent;
 import android.content.IntentFilter;
 import android.net.Uri;
 import android.os.Handler;
-import android.os.HandlerThread;
 import android.os.Looper;
 import android.os.UserHandle;
+import android.util.Slog;
 import com.android.internal.os.BackgroundThread;
 
 import java.util.HashSet;
@@ -243,7 +243,11 @@ public abstract class PackageMonitor extends android.content.BroadcastReceiver {
     public boolean anyPackagesDisappearing() {
         return mDisappearingPackages != null;
     }
-    
+
+    public boolean isReplacing() {
+        return mChangeType == PACKAGE_UPDATING;
+    }
+
     public boolean isPackageModified(String packageName) {
         if (mModifiedPackages != null) {
             for (int i=mModifiedPackages.length-1; i>=0; i--) {
@@ -276,8 +280,8 @@ public abstract class PackageMonitor extends android.content.BroadcastReceiver {
         mChangeUserId = intent.getIntExtra(Intent.EXTRA_USER_HANDLE,
                 UserHandle.USER_NULL);
         if (mChangeUserId == UserHandle.USER_NULL) {
-            throw new IllegalArgumentException(
-                    "Intent broadcast does not contain user handle: " + intent);
+            Slog.w("PackageMonitor", "Intent broadcast does not contain user handle: " + intent);
+            return;
         }
         onBeginPackageChanges();
         

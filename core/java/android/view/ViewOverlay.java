@@ -130,8 +130,11 @@ public class ViewOverlay {
             super(context);
             mHostView = hostView;
             mAttachInfo = mHostView.mAttachInfo;
+
             mRight = hostView.getWidth();
             mBottom = hostView.getHeight();
+            // pass right+bottom directly to RenderNode, since not going through setters
+            mRenderNode.setLeftTopRightBottom(0, 0, mRight, mBottom);
         }
 
         public void add(Drawable drawable) {
@@ -153,6 +156,11 @@ public class ViewOverlay {
                 invalidate(drawable.getBounds());
                 drawable.setCallback(null);
             }
+        }
+
+        @Override
+        protected boolean verifyDrawable(Drawable who) {
+            return super.verifyDrawable(who) || (mDrawables != null && mDrawables.contains(who));
         }
 
         public void add(View child) {
@@ -285,7 +293,11 @@ public class ViewOverlay {
             }
         }
 
-        public void invalidateChildFast(View child, final Rect dirty) {
+        /**
+         * @hide
+         */
+        @Override
+        public void damageChild(View child, final Rect dirty) {
             if (mHostView != null) {
                 // Note: This is not a "fast" invalidation. Would be nice to instead invalidate
                 // using DisplayList properties and a dirty rect instead of causing a real
@@ -304,9 +316,9 @@ public class ViewOverlay {
          * @hide
          */
         @Override
-        protected ViewParent invalidateChildInParentFast(int left, int top, Rect dirty) {
+        protected ViewParent damageChildInParent(int left, int top, Rect dirty) {
             if (mHostView instanceof ViewGroup) {
-                return ((ViewGroup) mHostView).invalidateChildInParentFast(left, top, dirty);
+                return ((ViewGroup) mHostView).damageChildInParent(left, top, dirty);
             }
             return null;
         }

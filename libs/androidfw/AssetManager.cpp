@@ -34,7 +34,7 @@
 #include <utils/String8.h>
 #include <utils/threads.h>
 #include <utils/Timers.h>
-#ifdef HAVE_ANDROID_OS
+#ifdef __ANDROID__
 #include <cutils/trace.h>
 #endif
 
@@ -54,7 +54,7 @@
     _rc; })
 #endif
 
-#ifdef HAVE_ANDROID_OS
+#ifdef __ANDROID__
 #define MY_TRACE_BEGIN(x) ATRACE_BEGIN(x)
 #define MY_TRACE_END() ATRACE_END()
 #else
@@ -63,6 +63,8 @@
 #endif
 
 using namespace android;
+
+static const bool kIsDebug = false;
 
 /*
  * Names for default app, locale, and vendor.  We might want to change
@@ -74,6 +76,7 @@ static const char* kAssetsRoot = "assets";
 static const char* kAppZipName = NULL; //"classes.jar";
 static const char* kSystemAssets = "framework/framework-res.apk";
 static const char* kResourceCache = "resource-cache";
+static const char* kAndroidManifest = "AndroidManifest.xml";
 
 static const char* kExcludeExtension = ".EXCLUDE";
 
@@ -151,15 +154,19 @@ AssetManager::AssetManager(CacheMode cacheMode)
       mResources(NULL), mConfig(new ResTable_config),
       mCacheMode(cacheMode), mCacheValid(false)
 {
-    int count = android_atomic_inc(&gCount)+1;
-    //ALOGI("Creating AssetManager %p #%d\n", this, count);
+    int count = android_atomic_inc(&gCount) + 1;
+    if (kIsDebug) {
+        ALOGI("Creating AssetManager %p #%d\n", this, count);
+    }
     memset(mConfig, 0, sizeof(ResTable_config));
 }
 
 AssetManager::~AssetManager(void)
 {
     int count = android_atomic_dec(&gCount);
-    //ALOGI("Destroying AssetManager in %p #%d\n", this, count);
+    if (kIsDebug) {
+        ALOGI("Destroying AssetManager in %p #%d\n", this, count);
+    }
 
     delete mConfig;
     delete mResources;
@@ -205,6 +212,16 @@ bool AssetManager::addAssetPath(const String8& path, int32_t* cookie)
     ALOGV("In %p Asset %s path: %s", this,
          ap.type == kFileTypeDirectory ? "dir" : "zip", ap.path.string());
 
+    // Check that the path has an AndroidManifest.xml
+    Asset* manifestAsset = const_cast<AssetManager*>(this)->openNonAssetInPathLocked(
+            kAndroidManifest, Asset::ACCESS_BUFFER, ap);
+    if (manifestAsset == NULL) {
+        // This asset path does not contain any resources.
+        delete manifestAsset;
+        return false;
+    }
+    delete manifestAsset;
+
     mAssetPaths.add(ap);
 
     // new paths are always added at the end
@@ -212,13 +229,17 @@ bool AssetManager::addAssetPath(const String8& path, int32_t* cookie)
         *cookie = static_cast<int32_t>(mAssetPaths.size());
     }
 
-#ifdef HAVE_ANDROID_OS
+#ifdef __ANDROID__
     // Load overlays, if any
     asset_path oap;
     for (size_t idx = 0; mZipSet.getOverlay(ap.path, idx, &oap); idx++) {
         mAssetPaths.add(oap);
     }
 #endif
+
+    if (mResources != NULL) {
+        appendPathToResTable(ap);
+    }
 
     return true;
 }
@@ -245,7 +266,7 @@ bool AssetManager::addOverlayPath(const String8& packagePath, int32_t* cookie)
     String8 targetPath;
     String8 overlayPath;
     if (!ResTable::getIdmapInfo(idmap->getBuffer(false), idmap->getLength(),
-                NULL, NULL, &targetPath, &overlayPath)) {
+                NULL, NULL, NULL, &targetPath, &overlayPath)) {
         ALOGW("failed to read idmap file %s\n", idmapPath.string());
         delete idmap;
         return false;
@@ -281,6 +302,10 @@ bool AssetManager::addOverlayPath(const String8& packagePath, int32_t* cookie)
     mAssetPaths.add(oap);
     *cookie = static_cast<int32_t>(mAssetPaths.size());
 
+    if (mResources != NULL) {
+        appendPathToResTable(oap);
+    }
+
     return true;
  }
 
@@ -300,7 +325,7 @@ bool AssetManager::createIdmap(const char* targetApkPath, const char* overlayApk
             ALOGW("failed to find resources.arsc in %s\n", ap.path.string());
             return false;
         }
-        tables[i].add(ass, 1, false /* copyData */, NULL /* idMap */);
+        tables[i].add(ass);
     }
 
     return tables[0].createIdmap(tables[1], targetCrc, overlayCrc,
@@ -508,7 +533,7 @@ Asset* AssetManager::open(const char* fileName, AccessMode mode)
  * The "fileName" is the partial path starting from the application
  * name.
  */
-Asset* AssetManager::openNonAsset(const char* fileName, AccessMode mode)
+Asset* AssetManager::openNonAsset(const char* fileName, AccessMode mode, int32_t* outCookie)
 {
     AutoMutex _l(mLock);
 
@@ -529,6 +554,7 @@ Asset* AssetManager::openNonAsset(const char* fileName, AccessMode mode)
         Asset* pAsset = openNonAssetInPathLocked(
             fileName, mode, mAssetPaths.itemAt(i));
         if (pAsset != NULL) {
+            if (outCookie != NULL) *outCookie = static_cast<int32_t>(i + 1);
             return pAsset != kExcludedAsset ? pAsset : NULL;
         }
     }
@@ -584,6 +610,101 @@ FileType AssetManager::getFileType(const char* fileName)
         return kFileTypeRegular;
 }
 
+bool AssetManager::appendPathToResTable(const asset_path& ap) const {
+    // skip those ap's that correspond to system overlays
+    if (ap.isSystemOverlay) {
+        return true;
+    }
+
+    Asset* ass = NULL;
+    ResTable* sharedRes = NULL;
+    bool shared = true;
+    bool onlyEmptyResources = true;
+    MY_TRACE_BEGIN(ap.path.string());
+    Asset* idmap = openIdmapLocked(ap);
+    size_t nextEntryIdx = mResources->getTableCount();
+    ALOGV("Looking for resource asset in '%s'\n", ap.path.string());
+    if (ap.type != kFileTypeDirectory) {
+        if (nextEntryIdx == 0) {
+            // The first item is typically the framework resources,
+            // which we want to avoid parsing every time.
+            sharedRes = const_cast<AssetManager*>(this)->
+                mZipSet.getZipResourceTable(ap.path);
+            if (sharedRes != NULL) {
+                // skip ahead the number of system overlay packages preloaded
+                nextEntryIdx = sharedRes->getTableCount();
+            }
+        }
+        if (sharedRes == NULL) {
+            ass = const_cast<AssetManager*>(this)->
+                mZipSet.getZipResourceTableAsset(ap.path);
+            if (ass == NULL) {
+                ALOGV("loading resource table %s\n", ap.path.string());
+                ass = const_cast<AssetManager*>(this)->
+                    openNonAssetInPathLocked("resources.arsc",
+                                             Asset::ACCESS_BUFFER,
+                                             ap);
+                if (ass != NULL && ass != kExcludedAsset) {
+                    ass = const_cast<AssetManager*>(this)->
+                        mZipSet.setZipResourceTableAsset(ap.path, ass);
+                }
+            }
+            
+            if (nextEntryIdx == 0 && ass != NULL) {
+                // If this is the first resource table in the asset
+                // manager, then we are going to cache it so that we
+                // can quickly copy it out for others.
+                ALOGV("Creating shared resources for %s", ap.path.string());
+                sharedRes = new ResTable();
+                sharedRes->add(ass, idmap, nextEntryIdx + 1, false);
+#ifdef __ANDROID__
+                const char* data = getenv("ANDROID_DATA");
+                LOG_ALWAYS_FATAL_IF(data == NULL, "ANDROID_DATA not set");
+                String8 overlaysListPath(data);
+                overlaysListPath.appendPath(kResourceCache);
+                overlaysListPath.appendPath("overlays.list");
+                addSystemOverlays(overlaysListPath.string(), ap.path, sharedRes, nextEntryIdx);
+#endif
+                sharedRes = const_cast<AssetManager*>(this)->
+                    mZipSet.setZipResourceTable(ap.path, sharedRes);
+            }
+        }
+    } else {
+        ALOGV("loading resource table %s\n", ap.path.string());
+        ass = const_cast<AssetManager*>(this)->
+            openNonAssetInPathLocked("resources.arsc",
+                                     Asset::ACCESS_BUFFER,
+                                     ap);
+        shared = false;
+    }
+
+    if ((ass != NULL || sharedRes != NULL) && ass != kExcludedAsset) {
+        ALOGV("Installing resource asset %p in to table %p\n", ass, mResources);
+        if (sharedRes != NULL) {
+            ALOGV("Copying existing resources for %s", ap.path.string());
+            mResources->add(sharedRes);
+        } else {
+            ALOGV("Parsing resources for %s", ap.path.string());
+            mResources->add(ass, idmap, nextEntryIdx + 1, !shared);
+        }
+        onlyEmptyResources = false;
+
+        if (!shared) {
+            delete ass;
+        }
+    } else {
+        ALOGV("Installing empty resources in to table %p\n", mResources);
+        mResources->addEmpty(nextEntryIdx + 1);
+    }
+
+    if (idmap != NULL) {
+        delete idmap;
+    }
+    MY_TRACE_END();
+
+    return onlyEmptyResources;
+}
+
 const ResTable* AssetManager::getResTable(bool required) const
 {
     ResTable* rt = mResources;
@@ -603,100 +724,27 @@ const ResTable* AssetManager::getResTable(bool required) const
         LOG_FATAL_IF(mAssetPaths.size() == 0, "No assets added to AssetManager");
     }
 
-    if (mCacheMode != CACHE_OFF && !mCacheValid)
+    if (mCacheMode != CACHE_OFF && !mCacheValid) {
         const_cast<AssetManager*>(this)->loadFileNameCacheLocked();
+    }
 
+    mResources = new ResTable();
+    updateResourceParamsLocked();
+
+    bool onlyEmptyResources = true;
     const size_t N = mAssetPaths.size();
     for (size_t i=0; i<N; i++) {
-        Asset* ass = NULL;
-        ResTable* sharedRes = NULL;
-        bool shared = true;
-        const asset_path& ap = mAssetPaths.itemAt(i);
-        MY_TRACE_BEGIN(ap.path.string());
-        Asset* idmap = openIdmapLocked(ap);
-        ALOGV("Looking for resource asset in '%s'\n", ap.path.string());
-        if (ap.type != kFileTypeDirectory) {
-            if (i == 0) {
-                // The first item is typically the framework resources,
-                // which we want to avoid parsing every time.
-                sharedRes = const_cast<AssetManager*>(this)->
-                    mZipSet.getZipResourceTable(ap.path);
-                if (sharedRes != NULL) {
-                    // skip ahead the number of system overlay packages preloaded
-                    i += sharedRes->getTableCount() - 1;
-                }
-            }
-            if (sharedRes == NULL) {
-                ass = const_cast<AssetManager*>(this)->
-                    mZipSet.getZipResourceTableAsset(ap.path);
-                if (ass == NULL) {
-                    ALOGV("loading resource table %s\n", ap.path.string());
-                    ass = const_cast<AssetManager*>(this)->
-                        openNonAssetInPathLocked("resources.arsc",
-                                                 Asset::ACCESS_BUFFER,
-                                                 ap);
-                    if (ass != NULL && ass != kExcludedAsset) {
-                        ass = const_cast<AssetManager*>(this)->
-                            mZipSet.setZipResourceTableAsset(ap.path, ass);
-                    }
-                }
-
-                if (i == 0 && ass != NULL) {
-                    // If this is the first resource table in the asset
-                    // manager, then we are going to cache it so that we
-                    // can quickly copy it out for others.
-                    ALOGV("Creating shared resources for %s", ap.path.string());
-                    sharedRes = new ResTable();
-                    sharedRes->add(ass, i + 1, false, idmap);
-#ifdef HAVE_ANDROID_OS
-                    const char* data = getenv("ANDROID_DATA");
-                    LOG_ALWAYS_FATAL_IF(data == NULL, "ANDROID_DATA not set");
-                    String8 overlaysListPath(data);
-                    overlaysListPath.appendPath(kResourceCache);
-                    overlaysListPath.appendPath("overlays.list");
-                    addSystemOverlays(overlaysListPath.string(), ap.path, sharedRes, i);
-#endif
-                    sharedRes = const_cast<AssetManager*>(this)->
-                        mZipSet.setZipResourceTable(ap.path, sharedRes);
-                }
-            }
-        } else {
-            ALOGV("loading resource table %s\n", ap.path.string());
-            ass = const_cast<AssetManager*>(this)->
-                openNonAssetInPathLocked("resources.arsc",
-                                         Asset::ACCESS_BUFFER,
-                                         ap);
-            shared = false;
-        }
-        if ((ass != NULL || sharedRes != NULL) && ass != kExcludedAsset) {
-            if (rt == NULL) {
-                mResources = rt = new ResTable();
-                updateResourceParamsLocked();
-            }
-            ALOGV("Installing resource asset %p in to table %p\n", ass, mResources);
-            if (sharedRes != NULL) {
-                ALOGV("Copying existing resources for %s", ap.path.string());
-                rt->add(sharedRes);
-            } else {
-                ALOGV("Parsing resources for %s", ap.path.string());
-                rt->add(ass, i + 1, !shared, idmap);
-            }
-
-            if (!shared) {
-                delete ass;
-            }
-        }
-        if (idmap != NULL) {
-            delete idmap;
-        }
-        MY_TRACE_END();
+        bool empty = appendPathToResTable(mAssetPaths.itemAt(i));
+        onlyEmptyResources = onlyEmptyResources && empty;
     }
 
-    if (required && !rt) ALOGW("Unable to find resources file resources.arsc");
-    if (!rt) {
-        mResources = rt = new ResTable();
+    if (required && onlyEmptyResources) {
+        ALOGW("Unable to find resources file resources.arsc");
+        delete mResources;
+        mResources = NULL;
     }
-    return rt;
+
+    return mResources;
 }
 
 void AssetManager::updateResourceParamsLocked() const
@@ -753,6 +801,7 @@ void AssetManager::addSystemOverlays(const char* pathOverlaysList,
         oap.path = String8(buf, space - buf);
         oap.type = kFileTypeRegular;
         oap.idmap = String8(space + 1, newline - space - 1);
+        oap.isSystemOverlay = true;
 
         Asset* oass = const_cast<AssetManager*>(this)->
             openNonAssetInPathLocked("resources.arsc",
@@ -762,7 +811,7 @@ void AssetManager::addSystemOverlays(const char* pathOverlaysList,
         if (oass != NULL) {
             Asset* oidmap = openIdmapLocked(oap);
             offset++;
-            sharedRes->add(oass, offset + 1, false, oidmap);
+            sharedRes->add(oass, oidmap, offset + 1, false);
             const_cast<AssetManager*>(this)->mAssetPaths.add(oap);
             const_cast<AssetManager*>(this)->mZipSet.addOverlay(targetPackagePath, oap);
         }
@@ -903,7 +952,7 @@ Asset* AssetManager::openInLocaleVendorLocked(const char* fileName, AccessMode m
             /* look at the filesystem on disk */
             String8 path(createPathNameLocked(ap, locale, vendor));
             path.appendPath(fileName);
-
+    
             String8 excludeName(path);
             excludeName.append(kExcludeExtension);
             if (::getFileType(excludeName.string()) != kFileTypeNonexistent) {
@@ -911,28 +960,28 @@ Asset* AssetManager::openInLocaleVendorLocked(const char* fileName, AccessMode m
                 //printf("+++ excluding '%s'\n", (const char*) excludeName);
                 return kExcludedAsset;
             }
-
+    
             pAsset = openAssetFromFileLocked(path, mode);
-
+    
             if (pAsset == NULL) {
                 /* try again, this time with ".gz" */
                 path.append(".gz");
                 pAsset = openAssetFromFileLocked(path, mode);
             }
-
+    
             if (pAsset != NULL)
                 pAsset->setAssetSource(path);
         } else {
             /* find in cache */
             String8 path(createPathNameLocked(ap, locale, vendor));
             path.appendPath(fileName);
-
+    
             AssetDir::FileInfo tmpInfo;
             bool found = false;
-
+    
             String8 excludeName(path);
             excludeName.append(kExcludeExtension);
-
+    
             if (mCache.indexOf(excludeName) != NAME_NOT_FOUND) {
                 /* go no farther */
                 //printf("+++ Excluding '%s'\n", (const char*) excludeName);
@@ -1107,13 +1156,11 @@ Asset* AssetManager::openAssetFromZipLocked(const ZipFileRO* pZipFile,
     Asset* pAsset = NULL;
 
     // TODO: look for previously-created shared memory slice?
-    int method;
-    size_t uncompressedLen;
+    uint16_t method;
+    uint32_t uncompressedLen;
 
     //printf("USING Zip '%s'\n", pEntry->getFileName());
 
-    //pZipFile->getEntryInfo(entry, &method, &uncompressedLen, &compressedLen,
-    //    &offset);
     if (!pZipFile->getEntryInfo(entry, &method, &uncompressedLen, NULL, NULL,
             NULL, NULL))
     {
@@ -1132,8 +1179,8 @@ Asset* AssetManager::openAssetFromZipLocked(const ZipFileRO* pZipFile,
         ALOGV("Opened uncompressed entry %s in zip %s mode %d: %p", entryName.string(),
                 dataMap->getFileName(), mode, pAsset);
     } else {
-        pAsset = Asset::createFromCompressedMap(dataMap, method,
-            uncompressedLen, mode);
+        pAsset = Asset::createFromCompressedMap(dataMap,
+            static_cast<size_t>(uncompressedLen), mode);
         ALOGV("Opened compressed entry %s in zip %s mode %d: %p", entryName.string(),
                 dataMap->getFileName(), mode, pAsset);
     }
@@ -1498,7 +1545,7 @@ bool AssetManager::scanAndMergeZipLocked(SortedVector<AssetDir::FileInfo>* pMerg
      */
     int dirNameLen = dirName.length();
     void *iterationCookie;
-    if (!pZip->startIteration(&iterationCookie)) {
+    if (!pZip->startIteration(&iterationCookie, dirName.string(), NULL)) {
         ALOGW("ZipFileRO::startIteration returned false");
         return false;
     }
@@ -1513,9 +1560,7 @@ bool AssetManager::scanAndMergeZipLocked(SortedVector<AssetDir::FileInfo>* pMerg
             continue;
         }
         //printf("Comparing %s in %s?\n", nameBuf, dirName.string());
-        if (dirNameLen == 0 ||
-            (strncmp(nameBuf, dirName.string(), dirNameLen) == 0 &&
-             nameBuf[dirNameLen] == '/'))
+        if (dirNameLen == 0 || nameBuf[dirNameLen] == '/')
         {
             const char* cp;
             const char* nextSlash;
@@ -1756,7 +1801,7 @@ bool AssetManager::fncScanAndMergeDirLocked(
 
     // XXX This is broken -- the filename cache needs to hold the base
     // asset path separately from its filename.
-
+    
     partialPath = createPathNameLocked(ap, locale, vendor);
     if (dirName[0] != '\0') {
         partialPath.appendPath(dirName);
@@ -1831,7 +1876,9 @@ AssetManager::SharedZip::SharedZip(const String8& path, time_t modWhen)
     : mPath(path), mZipFile(NULL), mModWhen(modWhen),
       mResourceTableAsset(NULL), mResourceTable(NULL)
 {
-    //ALOGI("Creating SharedZip %p %s\n", this, (const char*)mPath);
+    if (kIsDebug) {
+        ALOGI("Creating SharedZip %p %s\n", this, (const char*)mPath);
+    }
     ALOGV("+++ opening zip '%s'\n", mPath.string());
     mZipFile = ZipFileRO::open(mPath.string());
     if (mZipFile == NULL) {
@@ -1925,7 +1972,9 @@ bool AssetManager::SharedZip::getOverlay(size_t idx, asset_path* out) const
 
 AssetManager::SharedZip::~SharedZip()
 {
-    //ALOGI("Destroying SharedZip %p %s\n", this, (const char*)mPath);
+    if (kIsDebug) {
+        ALOGI("Destroying SharedZip %p %s\n", this, (const char*)mPath);
+    }
     if (mResourceTable != NULL) {
         delete mResourceTable;
     }

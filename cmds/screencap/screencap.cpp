@@ -32,10 +32,14 @@
 
 #include <ui/PixelFormat.h>
 
+// TODO: Fix Skia.
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wunused-parameter"
 #include <SkImageEncoder.h>
 #include <SkBitmap.h>
 #include <SkData.h>
 #include <SkStream.h>
+#pragma GCC diagnostic pop
 
 using namespace android;
 
@@ -54,13 +58,13 @@ static void usage(const char* pname)
     );
 }
 
-static SkBitmap::Config flinger2skia(PixelFormat f)
+static SkColorType flinger2skia(PixelFormat f)
 {
     switch (f) {
         case PIXEL_FORMAT_RGB_565:
-            return SkBitmap::kRGB_565_Config;
+            return kRGB_565_SkColorType;
         default:
-            return SkBitmap::kARGB_8888_Config;
+            return kN32_SkColorType;
     }
 }
 
@@ -129,7 +133,7 @@ int main(int argc, char** argv)
     argv += optind;
 
     int fd = -1;
-    const char* fn;
+    const char* fn = NULL;
     if (argc == 0) {
         fd = dup(STDOUT_FILENO);
     } else if (argc == 1) {
@@ -153,13 +157,13 @@ int main(int argc, char** argv)
     void const* mapbase = MAP_FAILED;
     ssize_t mapsize = -1;
 
-    void const* base = 0;
+    void const* base = NULL;
     uint32_t w, s, h, f;
     size_t size = 0;
 
     ScreenshotClient screenshot;
     sp<IBinder> display = SurfaceComposerClient::getBuiltInDisplay(displayId);
-    if (display != NULL && screenshot.update(display) == NO_ERROR) {
+    if (display != NULL && screenshot.update(display, Rect(), false) == NO_ERROR) {
         base = screenshot.getPixels();
         w = screenshot.getWidth();
         h = screenshot.getHeight();
@@ -190,18 +194,21 @@ int main(int argc, char** argv)
         }
     }
 
-    if (base) {
+    if (base != NULL) {
         if (png) {
+            const SkImageInfo info = SkImageInfo::Make(w, h, flinger2skia(f),
+                                                       kPremul_SkAlphaType);
             SkBitmap b;
-            b.setConfig(flinger2skia(f), w, h, s*bytesPerPixel(f));
-            b.setPixels((void*)base);
+            b.installPixels(info, const_cast<void*>(base), s*bytesPerPixel(f));
             SkDynamicMemoryWStream stream;
             SkImageEncoder::EncodeStream(&stream, b,
                     SkImageEncoder::kPNG_Type, SkImageEncoder::kDefaultQuality);
             SkData* streamData = stream.copyToData();
             write(fd, streamData->data(), streamData->size());
             streamData->unref();
-            notifyMediaScanner(fn);
+            if (fn != NULL) {
+                notifyMediaScanner(fn);
+            }
         } else {
             write(fd, &w, 4);
             write(fd, &h, 4);

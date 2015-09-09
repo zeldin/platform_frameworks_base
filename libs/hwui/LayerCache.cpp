@@ -49,6 +49,10 @@ LayerCache::~LayerCache() {
 // Size management
 ///////////////////////////////////////////////////////////////////////////////
 
+size_t LayerCache::getCount() {
+    return mCache.size();
+}
+
 uint32_t LayerCache::getSize() {
     return mSize;
 }
@@ -76,10 +80,13 @@ int LayerCache::LayerEntry::compare(const LayerCache::LayerEntry& lhs,
 
 void LayerCache::deleteLayer(Layer* layer) {
     if (layer) {
-        LAYER_LOGD("Destroying layer %dx%d, fbo %d", layer->getWidth(), layer->getHeight(),
-                layer->getFbo());
+        if (kDebugLayers) {
+            ALOGD("Destroying layer %dx%d, fbo %d", layer->getWidth(), layer->getHeight(),
+                    layer->getFbo());
+        }
         mSize -= layer->getWidth() * layer->getHeight() * 4;
-        Caches::getInstance().resourceCache.decrementRefcount(layer);
+        layer->state = Layer::kState_DeletedFromCache;
+        layer->decStrong(0);
     }
 }
 
@@ -91,7 +98,7 @@ void LayerCache::clear() {
     mCache.clear();
 }
 
-Layer* LayerCache::get(const uint32_t width, const uint32_t height) {
+Layer* LayerCache::get(RenderState& renderState, const uint32_t width, const uint32_t height) {
     Layer* layer = NULL;
 
     LayerEntry entry(width, height);
@@ -102,13 +109,18 @@ Layer* LayerCache::get(const uint32_t width, const uint32_t height) {
         mCache.removeAt(index);
 
         layer = entry.mLayer;
+        layer->state = Layer::kState_RemovedFromCache;
         mSize -= layer->getWidth() * layer->getHeight() * 4;
 
-        LAYER_LOGD("Reusing layer %dx%d", layer->getWidth(), layer->getHeight());
+        if (kDebugLayers) {
+            ALOGD("Reusing layer %dx%d", layer->getWidth(), layer->getHeight());
+        }
     } else {
-        LAYER_LOGD("Creating new layer %dx%d", entry.mWidth, entry.mHeight);
+        if (kDebugLayers) {
+            ALOGD("Creating new layer %dx%d", entry.mWidth, entry.mHeight);
+        }
 
-        layer = new Layer(entry.mWidth, entry.mHeight);
+        layer = new Layer(Layer::kType_DisplayList, renderState, entry.mWidth, entry.mHeight);
         layer->setBlend(true);
         layer->setEmpty(true);
         layer->setFbo(0);
@@ -131,7 +143,9 @@ void LayerCache::dump() {
     size_t size = mCache.size();
     for (size_t i = 0; i < size; i++) {
         const LayerEntry& entry = mCache.itemAt(i);
-        LAYER_LOGD("  Layer size %dx%d", entry.mWidth, entry.mHeight);
+        if (kDebugLayers) {
+            ALOGD("  Layer size %dx%d", entry.mWidth, entry.mHeight);
+        }
     }
 }
 
@@ -151,8 +165,10 @@ bool LayerCache::put(Layer* layer) {
             deleteLayer(victim);
             mCache.removeAt(position);
 
-            LAYER_LOGD("  Deleting layer %.2fx%.2f", victim->layer.getWidth(),
-                    victim->layer.getHeight());
+            if (kDebugLayers) {
+                ALOGD("  Deleting layer %.2fx%.2f", victim->layer.getWidth(),
+                        victim->layer.getHeight());
+            }
         }
 
         layer->cancelDefer();
@@ -162,8 +178,11 @@ bool LayerCache::put(Layer* layer) {
         mCache.add(entry);
         mSize += size;
 
+        layer->state = Layer::kState_InCache;
         return true;
     }
+
+    layer->state = Layer::kState_FailedToCache;
     return false;
 }
 

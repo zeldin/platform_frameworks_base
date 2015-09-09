@@ -46,6 +46,8 @@
 
 #include <android_runtime/AndroidRuntime.h>
 
+#include "core_jni_helpers.h"
+
 //#undef ALOGV
 //#define ALOGV(...) fprintf(stderr, __VA_ARGS__)
 
@@ -187,6 +189,45 @@ static void android_os_Parcel_writeNative(JNIEnv* env, jclass clazz, jlong nativ
     }
 }
 
+static void android_os_Parcel_writeBlob(JNIEnv* env, jclass clazz, jlong nativePtr, jobject data,
+                                        jint offset, jint length) {
+    Parcel* parcel = reinterpret_cast<Parcel*>(nativePtr);
+    if (parcel == NULL) {
+        return;
+    }
+
+    if (data == NULL) {
+        const status_t err = parcel->writeInt32(-1);
+        if (err != NO_ERROR) {
+            signalExceptionForError(env, clazz, err);
+        }
+        return;
+    }
+
+    const status_t err = parcel->writeInt32(length);
+    if (err != NO_ERROR) {
+        signalExceptionForError(env, clazz, err);
+        return;
+    }
+
+    android::Parcel::WritableBlob blob;
+    android::status_t err2 = parcel->writeBlob(length, &blob);
+    if (err2 != NO_ERROR) {
+        signalExceptionForError(env, clazz, err2);
+        return;
+    }
+
+    jbyte* ar = (jbyte*)env->GetPrimitiveArrayCritical((jarray)data, 0);
+    if (ar == NULL) {
+        memset(blob.data(), 0, length);
+    } else {
+        memcpy(blob.data(), ar + offset, length);
+        env->ReleasePrimitiveArrayCritical((jarray)data, ar, 0);
+    }
+
+    blob.release();
+}
+
 static void android_os_Parcel_writeInt(JNIEnv* env, jclass clazz, jlong nativePtr, jint val) {
     Parcel* parcel = reinterpret_cast<Parcel*>(nativePtr);
     const status_t err = parcel->writeInt32(val);
@@ -236,7 +277,9 @@ static void android_os_Parcel_writeString(JNIEnv* env, jclass clazz, jlong nativ
         if (val) {
             const jchar* str = env->GetStringCritical(val, 0);
             if (str) {
-                err = parcel->writeString16(str, env->GetStringLength(val));
+                err = parcel->writeString16(
+                    reinterpret_cast<const char16_t*>(str),
+                    env->GetStringLength(val));
                 env->ReleaseStringCritical(val, str);
             }
         } else {
@@ -297,6 +340,36 @@ static jbyteArray android_os_Parcel_createByteArray(JNIEnv* env, jclass clazz, j
     return ret;
 }
 
+static jbyteArray android_os_Parcel_readBlob(JNIEnv* env, jclass clazz, jlong nativePtr)
+{
+    jbyteArray ret = NULL;
+
+    Parcel* parcel = reinterpret_cast<Parcel*>(nativePtr);
+    if (parcel != NULL) {
+        int32_t len = parcel->readInt32();
+        if (len >= 0) {
+            android::Parcel::ReadableBlob blob;
+            android::status_t err = parcel->readBlob(len, &blob);
+            if (err != NO_ERROR) {
+                signalExceptionForError(env, clazz, err);
+                return NULL;
+            }
+
+            ret = env->NewByteArray(len);
+            if (ret != NULL) {
+                jbyte* a2 = (jbyte*)env->GetPrimitiveArrayCritical(ret, 0);
+                if (a2) {
+                    memcpy(a2, blob.data(), len);
+                    env->ReleasePrimitiveArrayCritical(ret, a2, 0);
+                }
+            }
+            blob.release();
+        }
+    }
+
+    return ret;
+}
+
 static jint android_os_Parcel_readInt(JNIEnv* env, jclass clazz, jlong nativePtr)
 {
     Parcel* parcel = reinterpret_cast<Parcel*>(nativePtr);
@@ -340,7 +413,7 @@ static jstring android_os_Parcel_readString(JNIEnv* env, jclass clazz, jlong nat
         size_t len;
         const char16_t* str = parcel->readString16Inplace(&len);
         if (str) {
-            return env->NewString(str, len);
+            return env->NewString(reinterpret_cast<const jchar*>(str), len);
         }
         return NULL;
     }
@@ -376,14 +449,11 @@ static jobject android_os_Parcel_openFileDescriptor(JNIEnv* env, jclass clazz,
         jniThrowNullPointerException(env, NULL);
         return NULL;
     }
-    const jchar* str = env->GetStringCritical(name, 0);
-    if (str == NULL) {
-        // Whatever, whatever.
-        jniThrowException(env, "java/lang/IllegalStateException", NULL);
+    ScopedUtfChars name8(env, name);
+    if (name8.c_str() == NULL) {
         return NULL;
     }
-    String8 name8(str, env->GetStringLength(name));
-    env->ReleaseStringCritical(name, str);
+
     int flags=0;
     switch (mode&0x30000000) {
         case 0:
@@ -406,7 +476,7 @@ static jobject android_os_Parcel_openFileDescriptor(JNIEnv* env, jclass clazz,
     if (mode&0x00000001) realMode |= S_IROTH;
     if (mode&0x00000002) realMode |= S_IWOTH;
 
-    int fd = open(name8.string(), flags, realMode);
+    int fd = open(name8.c_str(), flags, realMode);
     if (fd < 0) {
         jniThrowException(env, "java/io/FileNotFoundException", strerror(errno));
         return NULL;
@@ -577,7 +647,9 @@ static void android_os_Parcel_writeInterfaceToken(JNIEnv* env, jclass clazz, jlo
         // the caller expects to be invoking
         const jchar* str = env->GetStringCritical(name, 0);
         if (str != NULL) {
-            parcel->writeInterfaceToken(String16(str, env->GetStringLength(name)));
+            parcel->writeInterfaceToken(String16(
+                  reinterpret_cast<const char16_t*>(str),
+                  env->GetStringLength(name)));
             env->ReleaseStringCritical(name, str);
         }
     }
@@ -585,8 +657,6 @@ static void android_os_Parcel_writeInterfaceToken(JNIEnv* env, jclass clazz, jlo
 
 static void android_os_Parcel_enforceInterface(JNIEnv* env, jclass clazz, jlong nativePtr, jstring name)
 {
-    jboolean ret = JNI_FALSE;
-
     Parcel* parcel = reinterpret_cast<Parcel*>(nativePtr);
     if (parcel != NULL) {
         const jchar* str = env->GetStringCritical(name, 0);
@@ -594,7 +664,8 @@ static void android_os_Parcel_enforceInterface(JNIEnv* env, jclass clazz, jlong 
             IPCThreadState* threadState = IPCThreadState::self();
             const int32_t oldPolicy = threadState->getStrictModePolicy();
             const bool isValid = parcel->enforceInterface(
-                String16(str, env->GetStringLength(name)),
+                String16(reinterpret_cast<const char16_t*>(str),
+                         env->GetStringLength(name)),
                 threadState);
             env->ReleaseStringCritical(name, str);
             if (isValid) {
@@ -619,6 +690,16 @@ static void android_os_Parcel_enforceInterface(JNIEnv* env, jclass clazz, jlong 
             "Binder invocation to an incorrect interface");
 }
 
+static jlong android_os_Parcel_getGlobalAllocSize(JNIEnv* env, jclass clazz)
+{
+    return Parcel::getGlobalAllocSize();
+}
+
+static jlong android_os_Parcel_getGlobalAllocCount(JNIEnv* env, jclass clazz)
+{
+    return Parcel::getGlobalAllocCount();
+}
+
 // ----------------------------------------------------------------------------
 
 static const JNINativeMethod gParcelMethods[] = {
@@ -634,6 +715,7 @@ static const JNINativeMethod gParcelMethods[] = {
     {"nativeRestoreAllowFds",     "(JZ)V", (void*)android_os_Parcel_restoreAllowFds},
 
     {"nativeWriteByteArray",      "(J[BII)V", (void*)android_os_Parcel_writeNative},
+    {"nativeWriteBlob",           "(J[BII)V", (void*)android_os_Parcel_writeBlob},
     {"nativeWriteInt",            "(JI)V", (void*)android_os_Parcel_writeInt},
     {"nativeWriteLong",           "(JJ)V", (void*)android_os_Parcel_writeLong},
     {"nativeWriteFloat",          "(JF)V", (void*)android_os_Parcel_writeFloat},
@@ -643,6 +725,7 @@ static const JNINativeMethod gParcelMethods[] = {
     {"nativeWriteFileDescriptor", "(JLjava/io/FileDescriptor;)V", (void*)android_os_Parcel_writeFileDescriptor},
 
     {"nativeCreateByteArray",     "(J)[B", (void*)android_os_Parcel_createByteArray},
+    {"nativeReadBlob",            "(J)[B", (void*)android_os_Parcel_readBlob},
     {"nativeReadInt",             "(J)I", (void*)android_os_Parcel_readInt},
     {"nativeReadLong",            "(J)J", (void*)android_os_Parcel_readLong},
     {"nativeReadFloat",           "(J)F", (void*)android_os_Parcel_readFloat},
@@ -666,26 +749,23 @@ static const JNINativeMethod gParcelMethods[] = {
     {"nativeHasFileDescriptors",  "(J)Z", (void*)android_os_Parcel_hasFileDescriptors},
     {"nativeWriteInterfaceToken", "(JLjava/lang/String;)V", (void*)android_os_Parcel_writeInterfaceToken},
     {"nativeEnforceInterface",    "(JLjava/lang/String;)V", (void*)android_os_Parcel_enforceInterface},
+
+    {"getGlobalAllocSize",        "()J", (void*)android_os_Parcel_getGlobalAllocSize},
+    {"getGlobalAllocCount",       "()J", (void*)android_os_Parcel_getGlobalAllocCount},
 };
 
 const char* const kParcelPathName = "android/os/Parcel";
 
 int register_android_os_Parcel(JNIEnv* env)
 {
-    jclass clazz;
+    jclass clazz = FindClassOrDie(env, kParcelPathName);
 
-    clazz = env->FindClass(kParcelPathName);
-    LOG_FATAL_IF(clazz == NULL, "Unable to find class android.os.Parcel");
+    gParcelOffsets.clazz = MakeGlobalRefOrDie(env, clazz);
+    gParcelOffsets.mNativePtr = GetFieldIDOrDie(env, clazz, "mNativePtr", "J");
+    gParcelOffsets.obtain = GetStaticMethodIDOrDie(env, clazz, "obtain", "()Landroid/os/Parcel;");
+    gParcelOffsets.recycle = GetMethodIDOrDie(env, clazz, "recycle", "()V");
 
-    gParcelOffsets.clazz = (jclass) env->NewGlobalRef(clazz);
-    gParcelOffsets.mNativePtr = env->GetFieldID(clazz, "mNativePtr", "J");
-    gParcelOffsets.obtain = env->GetStaticMethodID(clazz, "obtain",
-                                                   "()Landroid/os/Parcel;");
-    gParcelOffsets.recycle = env->GetMethodID(clazz, "recycle", "()V");
-
-    return AndroidRuntime::registerNativeMethods(
-        env, kParcelPathName,
-        gParcelMethods, NELEM(gParcelMethods));
+    return RegisterMethodsOrDie(env, kParcelPathName, gParcelMethods, NELEM(gParcelMethods));
 }
 
 };

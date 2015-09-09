@@ -167,8 +167,16 @@ interface IBackupManager {
      *     are to be backed up.  The <code>allApps</code> parameter supersedes this.
      */
     void fullBackup(in ParcelFileDescriptor fd, boolean includeApks, boolean includeObbs,
-            boolean includeShared, boolean allApps, boolean allIncludesSystem,
-            in String[] packageNames);
+            boolean includeShared, boolean doWidgets, boolean allApps, boolean allIncludesSystem,
+            boolean doCompress, in String[] packageNames);
+
+    /**
+     * Perform a full-dataset backup of the given applications via the currently active
+     * transport.
+     *
+     * @param packageNames The package names of the apps whose data are to be backed up.
+     */
+    void fullTransportBackup(in String[] packageNames);
 
     /**
      * Restore device content from the data stream passed through the given socket.  The
@@ -242,6 +250,18 @@ interface IBackupManager {
     String getDestinationString(String transport);
 
     /**
+     * Get the manage-data UI intent, if any, from the given transport.  Callers must
+     * hold the android.permission.BACKUP permission in order to use this method.
+     */
+    Intent getDataManagementIntent(String transport);
+
+    /**
+     * Get the manage-data menu label, if any, from the given transport.  Callers must
+     * hold the android.permission.BACKUP permission in order to use this method.
+     */
+    String getDataManagementLabel(String transport);
+
+    /**
      * Begin a restore session.  Either or both of packageName and transportID
      * may be null.  If packageName is non-null, then only the given package will be
      * considered for restore.  If transportID is null, then the restore will use
@@ -271,4 +291,23 @@ interface IBackupManager {
      * {@hide}
      */
     void opComplete(int token);
+
+    /**
+     * Make the device's backup and restore machinery (in)active.  When it is inactive,
+     * the device will not perform any backup operations, nor will it deliver data for
+     * restore, although clients can still safely call BackupManager methods.
+     *
+     * @param whichUser User handle of the defined user whose backup active state
+     *     is to be adjusted.
+     * @param makeActive {@code true} when backup services are to be made active;
+     *     {@code false} otherwise.
+     */
+    void setBackupServiceActive(int whichUser, boolean makeActive);
+
+    /**
+     * Queries the activity status of backup service as set by {@link #setBackupServiceActive}.
+     * @param whichUser User handle of the defined user whose backup active state
+     *     is being queried.
+     */
+    boolean isBackupServiceActive(int whichUser);
 }

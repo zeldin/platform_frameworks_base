@@ -1,6 +1,8 @@
 #include <jni.h>
 #include "GraphicsJNI.h"
 
+#include "core_jni_helpers.h"
+
 #include "SkPathEffect.h"
 #include "SkCornerPathEffect.h"
 #include "SkDashPathEffect.h"
@@ -20,7 +22,7 @@ public:
                                      jlong outerHandle, jlong innerHandle) {
         SkPathEffect* outer = reinterpret_cast<SkPathEffect*>(outerHandle);
         SkPathEffect* inner = reinterpret_cast<SkPathEffect*>(innerHandle);
-        SkPathEffect* effect = new SkComposePathEffect(outer, inner);
+        SkPathEffect* effect = SkComposePathEffect::Create(outer, inner);
         return reinterpret_cast<jlong>(effect);
     }
 
@@ -28,22 +30,20 @@ public:
                                  jlong firstHandle, jlong secondHandle) {
         SkPathEffect* first = reinterpret_cast<SkPathEffect*>(firstHandle);
         SkPathEffect* second = reinterpret_cast<SkPathEffect*>(secondHandle);
-        SkPathEffect* effect = new SkSumPathEffect(first, second);
+        SkPathEffect* effect = SkSumPathEffect::Create(first, second);
         return reinterpret_cast<jlong>(effect);
     }
 
     static jlong Dash_constructor(JNIEnv* env, jobject,
                                       jfloatArray intervalArray, jfloat phase) {
         AutoJavaFloatArray autoInterval(env, intervalArray);
-        int     count = autoInterval.length() & ~1;  // even number
-        float*  values = autoInterval.ptr();
-
-        SkAutoSTMalloc<32, SkScalar>    storage(count);
-        SkScalar*                       intervals = storage.get();
-        for (int i = 0; i < count; i++) {
-            intervals[i] = SkFloatToScalar(values[i]);
-        }
-        SkPathEffect* effect = new SkDashPathEffect(intervals, count, SkFloatToScalar(phase));
+        int         count = autoInterval.length() & ~1;  // even number
+#ifdef SK_SCALAR_IS_FLOAT
+        SkScalar*   intervals = autoInterval.ptr();
+#else
+        #error Need to convert float array to SkScalar array before calling the following function.
+#endif
+        SkPathEffect* effect = SkDashPathEffect::Create(intervals, count, phase);
         return reinterpret_cast<jlong>(effect);
     }
 
@@ -51,20 +51,19 @@ public:
                   jlong shapeHandle, jfloat advance, jfloat phase, jint style) {
         const SkPath* shape = reinterpret_cast<SkPath*>(shapeHandle);
         SkASSERT(shape != NULL);
-        SkPathEffect* effect = new SkPath1DPathEffect(*shape, SkFloatToScalar(advance),
-                     SkFloatToScalar(phase), (SkPath1DPathEffect::Style)style);
+        SkPathEffect* effect = SkPath1DPathEffect::Create(*shape, advance, phase,
+                (SkPath1DPathEffect::Style)style);
         return reinterpret_cast<jlong>(effect);
     }
 
     static jlong Corner_constructor(JNIEnv* env, jobject, jfloat radius){
-        SkPathEffect* effect = new SkCornerPathEffect(SkFloatToScalar(radius));
+        SkPathEffect* effect = SkCornerPathEffect::Create(radius);
         return reinterpret_cast<jlong>(effect);
     }
 
     static jlong Discrete_constructor(JNIEnv* env, jobject,
                                       jfloat length, jfloat deviation) {
-        SkPathEffect* effect = new SkDiscretePathEffect(SkFloatToScalar(length),
-                                        SkFloatToScalar(deviation));
+        SkPathEffect* effect = SkDiscretePathEffect::Create(length, deviation);
         return reinterpret_cast<jlong>(effect);
     }
 
@@ -100,24 +99,22 @@ static JNINativeMethod gDiscretePathEffectMethods[] = {
     { "nativeCreate", "(FF)J", (void*)SkPathEffectGlue::Discrete_constructor }
 };
 
-#include <android_runtime/AndroidRuntime.h>
-
-#define REG(env, name, array)                                              \
-    result = android::AndroidRuntime::registerNativeMethods(env, name, array, \
-                                                  SK_ARRAY_COUNT(array));  \
-    if (result < 0) return result
-
 int register_android_graphics_PathEffect(JNIEnv* env)
 {
-    int result;
-
-    REG(env, "android/graphics/PathEffect", gPathEffectMethods);
-    REG(env, "android/graphics/ComposePathEffect", gComposePathEffectMethods);
-    REG(env, "android/graphics/SumPathEffect", gSumPathEffectMethods);
-    REG(env, "android/graphics/DashPathEffect", gDashPathEffectMethods);
-    REG(env, "android/graphics/PathDashPathEffect", gPathDashPathEffectMethods);
-    REG(env, "android/graphics/CornerPathEffect", gCornerPathEffectMethods);
-    REG(env, "android/graphics/DiscretePathEffect", gDiscretePathEffectMethods);
+    android::RegisterMethodsOrDie(env, "android/graphics/PathEffect", gPathEffectMethods,
+                         NELEM(gPathEffectMethods));
+    android::RegisterMethodsOrDie(env, "android/graphics/ComposePathEffect",
+                                  gComposePathEffectMethods, NELEM(gComposePathEffectMethods));
+    android::RegisterMethodsOrDie(env, "android/graphics/SumPathEffect", gSumPathEffectMethods,
+                                  NELEM(gSumPathEffectMethods));
+    android::RegisterMethodsOrDie(env, "android/graphics/DashPathEffect", gDashPathEffectMethods,
+                                  NELEM(gDashPathEffectMethods));
+    android::RegisterMethodsOrDie(env, "android/graphics/PathDashPathEffect",
+                                  gPathDashPathEffectMethods, NELEM(gPathDashPathEffectMethods));
+    android::RegisterMethodsOrDie(env, "android/graphics/CornerPathEffect",
+                                  gCornerPathEffectMethods, NELEM(gCornerPathEffectMethods));
+    android::RegisterMethodsOrDie(env, "android/graphics/DiscretePathEffect",
+                                  gDiscretePathEffectMethods, NELEM(gDiscretePathEffectMethods));
 
     return 0;
 }

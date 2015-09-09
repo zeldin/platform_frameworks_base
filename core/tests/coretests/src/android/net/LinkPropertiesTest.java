@@ -31,13 +31,16 @@ public class LinkPropertiesTest extends TestCase {
             "2001:0db8:85a3:0000:0000:8a2e:0370:7334");
     private static InetAddress DNS1 = NetworkUtils.numericToInetAddress("75.208.7.1");
     private static InetAddress DNS2 = NetworkUtils.numericToInetAddress("69.78.7.1");
+    private static InetAddress DNS6 = NetworkUtils.numericToInetAddress("2001:4860:4860::8888");
     private static InetAddress GATEWAY1 = NetworkUtils.numericToInetAddress("75.208.8.1");
     private static InetAddress GATEWAY2 = NetworkUtils.numericToInetAddress("69.78.8.1");
+    private static InetAddress GATEWAY6 = NetworkUtils.numericToInetAddress("fe80::6:0000:613");
     private static String NAME = "qmi0";
     private static int MTU = 1500;
 
     private static LinkAddress LINKADDRV4 = new LinkAddress(ADDRV4, 32);
     private static LinkAddress LINKADDRV6 = new LinkAddress(ADDRV6, 128);
+    private static LinkAddress LINKADDRV6LINKLOCAL = new LinkAddress("fe80::1/64");
 
     public void assertLinkPropertiesEqual(LinkProperties source, LinkProperties target) {
         // Check implementation of equals(), element by element.
@@ -88,8 +91,8 @@ public class LinkPropertiesTest extends TestCase {
             source.addLinkAddress(LINKADDRV4);
             source.addLinkAddress(LINKADDRV6);
             // set 2 dnses
-            source.addDns(DNS1);
-            source.addDns(DNS2);
+            source.addDnsServer(DNS1);
+            source.addDnsServer(DNS2);
             // set 2 gateways
             source.addRoute(new RouteInfo(GATEWAY1));
             source.addRoute(new RouteInfo(GATEWAY2));
@@ -101,8 +104,8 @@ public class LinkPropertiesTest extends TestCase {
             target.setInterfaceName(NAME);
             target.addLinkAddress(LINKADDRV4);
             target.addLinkAddress(LINKADDRV6);
-            target.addDns(DNS1);
-            target.addDns(DNS2);
+            target.addDnsServer(DNS1);
+            target.addDnsServer(DNS2);
             target.addRoute(new RouteInfo(GATEWAY1));
             target.addRoute(new RouteInfo(GATEWAY2));
             target.setMtu(MTU);
@@ -114,8 +117,8 @@ public class LinkPropertiesTest extends TestCase {
             target.setInterfaceName("qmi1");
             target.addLinkAddress(LINKADDRV4);
             target.addLinkAddress(LINKADDRV6);
-            target.addDns(DNS1);
-            target.addDns(DNS2);
+            target.addDnsServer(DNS1);
+            target.addDnsServer(DNS2);
             target.addRoute(new RouteInfo(GATEWAY1));
             target.addRoute(new RouteInfo(GATEWAY2));
             target.setMtu(MTU);
@@ -127,8 +130,8 @@ public class LinkPropertiesTest extends TestCase {
             target.addLinkAddress(new LinkAddress(
                     NetworkUtils.numericToInetAddress("75.208.6.2"), 32));
             target.addLinkAddress(LINKADDRV6);
-            target.addDns(DNS1);
-            target.addDns(DNS2);
+            target.addDnsServer(DNS1);
+            target.addDnsServer(DNS2);
             target.addRoute(new RouteInfo(GATEWAY1));
             target.addRoute(new RouteInfo(GATEWAY2));
             target.setMtu(MTU);
@@ -139,8 +142,8 @@ public class LinkPropertiesTest extends TestCase {
             target.addLinkAddress(LINKADDRV4);
             target.addLinkAddress(LINKADDRV6);
             // change dnses
-            target.addDns(NetworkUtils.numericToInetAddress("75.208.7.2"));
-            target.addDns(DNS2);
+            target.addDnsServer(NetworkUtils.numericToInetAddress("75.208.7.2"));
+            target.addDnsServer(DNS2);
             target.addRoute(new RouteInfo(GATEWAY1));
             target.addRoute(new RouteInfo(GATEWAY2));
             target.setMtu(MTU);
@@ -150,8 +153,8 @@ public class LinkPropertiesTest extends TestCase {
             target.setInterfaceName(NAME);
             target.addLinkAddress(LINKADDRV4);
             target.addLinkAddress(LINKADDRV6);
-            target.addDns(DNS1);
-            target.addDns(DNS2);
+            target.addDnsServer(DNS1);
+            target.addDnsServer(DNS2);
             // change gateway
             target.addRoute(new RouteInfo(NetworkUtils.numericToInetAddress("75.208.8.2")));
             target.addRoute(new RouteInfo(GATEWAY2));
@@ -162,8 +165,8 @@ public class LinkPropertiesTest extends TestCase {
             target.setInterfaceName(NAME);
             target.addLinkAddress(LINKADDRV4);
             target.addLinkAddress(LINKADDRV6);
-            target.addDns(DNS1);
-            target.addDns(DNS2);
+            target.addDnsServer(DNS1);
+            target.addDnsServer(DNS2);
             target.addRoute(new RouteInfo(GATEWAY1));
             target.addRoute(new RouteInfo(GATEWAY2));
             // change mtu
@@ -185,8 +188,8 @@ public class LinkPropertiesTest extends TestCase {
             source.addLinkAddress(LINKADDRV4);
             source.addLinkAddress(LINKADDRV6);
             // set 2 dnses
-            source.addDns(DNS1);
-            source.addDns(DNS2);
+            source.addDnsServer(DNS1);
+            source.addDnsServer(DNS2);
             // set 2 gateways
             source.addRoute(new RouteInfo(GATEWAY1));
             source.addRoute(new RouteInfo(GATEWAY2));
@@ -197,8 +200,8 @@ public class LinkPropertiesTest extends TestCase {
             target.setInterfaceName(NAME);
             target.addLinkAddress(LINKADDRV6);
             target.addLinkAddress(LINKADDRV4);
-            target.addDns(DNS2);
-            target.addDns(DNS1);
+            target.addDnsServer(DNS2);
+            target.addDnsServer(DNS1);
             target.addRoute(new RouteInfo(GATEWAY2));
             target.addRoute(new RouteInfo(GATEWAY1));
             target.setMtu(MTU);
@@ -245,11 +248,15 @@ public class LinkPropertiesTest extends TestCase {
         // Add a route with no interface to a LinkProperties with no interface. No errors.
         LinkProperties lp = new LinkProperties();
         RouteInfo r = new RouteInfo(prefix, address, null);
-        lp.addRoute(r);
+        assertTrue(lp.addRoute(r));
         assertEquals(1, lp.getRoutes().size());
         assertAllRoutesHaveInterface(null, lp);
 
-        // Add a route with an interface. Except an exception.
+        // Adding the same route twice has no effect.
+        assertFalse(lp.addRoute(r));
+        assertEquals(1, lp.getRoutes().size());
+
+        // Add a route with an interface. Expect an exception.
         r = new RouteInfo(prefix, address, "wlan0");
         try {
           lp.addRoute(r);
@@ -267,6 +274,7 @@ public class LinkPropertiesTest extends TestCase {
         } catch (IllegalArgumentException expected) {}
 
         // If the interface name matches, the route is added.
+        r = new RouteInfo(prefix, null, "wlan0");
         lp.setInterfaceName("wlan0");
         lp.addRoute(r);
         assertEquals(2, lp.getRoutes().size());
@@ -332,14 +340,14 @@ public class LinkPropertiesTest extends TestCase {
             assertFalse("newname".equals(link.getInterfaceName()));
         }
 
-        assertTrue(rmnet0.removeStackedLink(clat4));
+        assertTrue(rmnet0.removeStackedLink("clat4"));
         assertEquals(0, rmnet0.getStackedLinks().size());
         assertEquals(1, rmnet0.getAddresses().size());
         assertEquals(1, rmnet0.getLinkAddresses().size());
         assertEquals(1, rmnet0.getAllAddresses().size());
         assertEquals(1, rmnet0.getAllLinkAddresses().size());
 
-        assertFalse(rmnet0.removeStackedLink(clat4));
+        assertFalse(rmnet0.removeStackedLink("clat4"));
     }
 
     private LinkAddress getFirstLinkAddress(LinkProperties lp) {
@@ -352,7 +360,7 @@ public class LinkPropertiesTest extends TestCase {
 
         // No addresses.
         assertFalse(lp.hasIPv4Address());
-        assertFalse(lp.hasIPv6Address());
+        assertFalse(lp.hasGlobalIPv6Address());
 
         // Addresses on stacked links don't count.
         LinkProperties stacked = new LinkProperties();
@@ -361,12 +369,12 @@ public class LinkPropertiesTest extends TestCase {
         stacked.addLinkAddress(LINKADDRV4);
         stacked.addLinkAddress(LINKADDRV6);
         assertTrue(stacked.hasIPv4Address());
-        assertTrue(stacked.hasIPv6Address());
+        assertTrue(stacked.hasGlobalIPv6Address());
         assertFalse(lp.hasIPv4Address());
-        assertFalse(lp.hasIPv6Address());
-        lp.removeStackedLink(stacked);
+        assertFalse(lp.hasGlobalIPv6Address());
+        lp.removeStackedLink("stacked");
         assertFalse(lp.hasIPv4Address());
-        assertFalse(lp.hasIPv6Address());
+        assertFalse(lp.hasGlobalIPv6Address());
 
         // Addresses on the base link.
         // Check the return values of hasIPvXAddress and ensure the add/remove methods return true
@@ -375,19 +383,29 @@ public class LinkPropertiesTest extends TestCase {
         assertTrue(lp.addLinkAddress(LINKADDRV6));
         assertEquals(1, lp.getLinkAddresses().size());
         assertFalse(lp.hasIPv4Address());
-        assertTrue(lp.hasIPv6Address());
+        assertTrue(lp.hasGlobalIPv6Address());
 
         assertTrue(lp.removeLinkAddress(LINKADDRV6));
         assertEquals(0, lp.getLinkAddresses().size());
-        assertTrue(lp.addLinkAddress(LINKADDRV4));
-        assertEquals(1, lp.getLinkAddresses().size());
-        assertTrue(lp.hasIPv4Address());
-        assertFalse(lp.hasIPv6Address());
 
-        assertTrue(lp.addLinkAddress(LINKADDRV6));
+        assertTrue(lp.addLinkAddress(LINKADDRV6LINKLOCAL));
+        assertEquals(1, lp.getLinkAddresses().size());
+        assertFalse(lp.hasGlobalIPv6Address());
+
+        assertTrue(lp.addLinkAddress(LINKADDRV4));
         assertEquals(2, lp.getLinkAddresses().size());
         assertTrue(lp.hasIPv4Address());
-        assertTrue(lp.hasIPv6Address());
+        assertFalse(lp.hasGlobalIPv6Address());
+
+        assertTrue(lp.addLinkAddress(LINKADDRV6));
+        assertEquals(3, lp.getLinkAddresses().size());
+        assertTrue(lp.hasIPv4Address());
+        assertTrue(lp.hasGlobalIPv6Address());
+
+        assertTrue(lp.removeLinkAddress(LINKADDRV6LINKLOCAL));
+        assertEquals(2, lp.getLinkAddresses().size());
+        assertTrue(lp.hasIPv4Address());
+        assertTrue(lp.hasGlobalIPv6Address());
 
         // Adding an address twice has no effect.
         // Removing an address that's not present has no effect.
@@ -436,5 +454,48 @@ public class LinkPropertiesTest extends TestCase {
 
         lp2.setLinkAddresses(lp.getLinkAddresses());
         assertTrue(lp.equals(lp));
+    }
+
+    @SmallTest
+    public void testIsProvisioned() {
+        LinkProperties lp4 = new LinkProperties();
+        assertFalse("v4only:empty", lp4.isProvisioned());
+        lp4.addLinkAddress(LINKADDRV4);
+        assertFalse("v4only:addr-only", lp4.isProvisioned());
+        lp4.addDnsServer(DNS1);
+        assertFalse("v4only:addr+dns", lp4.isProvisioned());
+        lp4.addRoute(new RouteInfo(GATEWAY1));
+        assertTrue("v4only:addr+dns+route", lp4.isProvisioned());
+
+        LinkProperties lp6 = new LinkProperties();
+        assertFalse("v6only:empty", lp6.isProvisioned());
+        lp6.addLinkAddress(LINKADDRV6LINKLOCAL);
+        assertFalse("v6only:fe80-only", lp6.isProvisioned());
+        lp6.addDnsServer(DNS6);
+        assertFalse("v6only:fe80+dns", lp6.isProvisioned());
+        lp6.addRoute(new RouteInfo(GATEWAY6));
+        assertFalse("v6only:fe80+dns+route", lp6.isProvisioned());
+        lp6.addLinkAddress(LINKADDRV6);
+        assertTrue("v6only:fe80+global+dns+route", lp6.isProvisioned());
+        lp6.removeLinkAddress(LINKADDRV6LINKLOCAL);
+        assertTrue("v6only:global+dns+route", lp6.isProvisioned());
+
+        LinkProperties lp46 = new LinkProperties();
+        lp46.addLinkAddress(LINKADDRV4);
+        lp46.addLinkAddress(LINKADDRV6);
+        lp46.addDnsServer(DNS1);
+        lp46.addDnsServer(DNS6);
+        assertFalse("dualstack:missing-routes", lp46.isProvisioned());
+        lp46.addRoute(new RouteInfo(GATEWAY1));
+        assertTrue("dualstack:v4-provisioned", lp46.isProvisioned());
+        lp6.addRoute(new RouteInfo(GATEWAY6));
+        assertTrue("dualstack:both-provisioned", lp46.isProvisioned());
+
+        // A link with an IPv6 address and default route, but IPv4 DNS server.
+        LinkProperties mixed = new LinkProperties();
+        mixed.addLinkAddress(LINKADDRV6);
+        mixed.addDnsServer(DNS1);
+        mixed.addRoute(new RouteInfo(GATEWAY6));
+        assertFalse("mixed:addr6+route6+dns4", mixed.isProvisioned());
     }
 }

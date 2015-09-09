@@ -40,7 +40,6 @@ import javax.net.ssl.TrustManager;
 import javax.net.ssl.X509TrustManager;
 import java.io.File;
 import java.io.IOException;
-import java.net.InetSocketAddress;
 import java.net.Socket;
 import java.security.KeyManagementException;
 import java.security.cert.X509Certificate;
@@ -80,7 +79,7 @@ public class HttpsConnection extends Connection {
                 cache = FileClientSessionCache.usingDirectory(sessionDir);
             }
 
-            OpenSSLContextImpl sslContext = new OpenSSLContextImpl();
+            OpenSSLContextImpl sslContext = OpenSSLContextImpl.getPreferred();
 
             // here, trust managers is a single trust-all manager
             TrustManager[] trustManagers = new TrustManager[] {

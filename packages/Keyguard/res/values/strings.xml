@@ -18,6 +18,8 @@
 */
 -->
 <resources xmlns:xliff="urn:oasis:names:tc:xliff:document:1.2">
+    <!-- App label in the manifest  -->
+    <string name="app_name">Keyguard</string>
     <!-- Instructions telling the user to enter their SIM PIN to unlock the keyguard.
          Displayed in one line in a large font.  -->
     <string name="keyguard_password_enter_pin_code">Type PIN code</string>
@@ -57,8 +59,8 @@
     <string name="keyguard_charged">Charged</string>
 
     <!-- When the lock screen is showing and the phone plugged in, and the battery
-         is not fully charged, show the current charge %.  -->
-    <string name="keyguard_plugged_in">Charging, <xliff:g id="number">%d</xliff:g><xliff:g id="percent">%%</xliff:g></string>
+         is not fully charged, say that it's charging.  -->
+    <string name="keyguard_plugged_in">Charging</string>
 
     <!-- When the lock screen is showing and the battery is low, warn user to plug
          in the phone soon. -->
@@ -95,9 +97,9 @@
     <string name="keyguard_sim_unlock_progress_dialog_message">Unlocking SIM card\u2026</string>
 
     <!-- Time format strings for fall-back clock widget -->
-    <string name="keyguard_widget_12_hours_format" translatable="false">h&#58;mm</string>
+    <string name="keyguard_widget_12_hours_format" translatable="false">h\uee01mm</string>
     <!-- Time format strings for fall-back clock widget -->
-    <string name="keyguard_widget_24_hours_format" translatable="false">kk&#58;mm</string>
+    <string name="keyguard_widget_24_hours_format" translatable="false">kk\uee01mm</string>
 
     <!-- Accessibility description sent when user changes the current lock screen widget. [CHAR_LIMIT=none] -->
     <string name="keyguard_accessibility_widget_changed">%1$s. Widget %2$d of %3$d.</string>
@@ -113,8 +115,6 @@
     <string name="keyguard_accessibility_widget"><xliff:g id="widget_index">%1$s</xliff:g> widget.</string>
     <!-- Accessibility description of the lock screen user selector widget. [CHAR_LIMIT=none] -->
     <string name="keyguard_accessibility_user_selector">User selector</string>
-    <!-- Accessibility description of the lock screen status widget. [CHAR_LIMIT=none] -->
-    <string name="keyguard_accessibility_status">Status</string>
     <!-- Accessibility description of the camera widget. [CHAR_LIMIT=none] -->
     <string name="keyguard_accessibility_camera">Camera</string>
     <!-- Accessibility description of the lock media control widget. [CHAR_LIMIT=none] -->
@@ -141,6 +141,12 @@
     <string name="keyguard_accessibility_pattern_area">Pattern area.</string>
     <!-- Accessibility description of the unlock slide area. [CHAR_LIMIT=none] -->
     <string name="keyguard_accessibility_slide_area">Slide area.</string>
+    <!-- Accessibility description of the PIN password view. [CHAR_LIMIT=none] -->
+    <string name="keyguard_accessibility_pin_area">PIN area</string>
+    <!-- Accessibility description of the SIM PIN password view. [CHAR_LIMIT=none] -->
+    <string name="keyguard_accessibility_sim_pin_area">SIM PIN area</string>
+    <!-- Accessibility description of the SIM PUK password view. [CHAR_LIMIT=none] -->
+    <string name="keyguard_accessibility_sim_puk_area">SIM PUK area</string>
 
     <!-- Shown on transport control of lockscreen. Pressing button goes to previous track. -->
     <string name="keyguard_accessibility_transport_prev_description">Previous track button</string>
@@ -173,6 +179,9 @@
 
     <!-- Accessibility description announced when user drags widget away from delete drop target [CHAR LIMIT=NONE] -->
     <string name="keyguard_accessibility_delete_widget_end"><xliff:g id="widget_index">%1$s</xliff:g> will not be deleted.</string>
+
+    <!-- Accessibility description for the text view that indicates when the next alarm is set (not shown on screen). [CHAR_LIMIT=none] -->
+    <string name="keyguard_accessibility_next_alarm">Next alarm set for <xliff:g id="alarm" example="Fri 8:30 AM">%1$s</xliff:g></string>
 
     <!-- Password keyboard strings. Used by LockScreen and Settings --><skip />
     <!-- Label for "switch to symbols" key.  Must be short to fit on key! -->
@@ -237,12 +246,16 @@
     <string name="kg_pattern_instructions">Draw your pattern</string>
     <!-- Instructions for using the SIM PIN unlock screen -->
     <string name="kg_sim_pin_instructions">Enter SIM PIN</string>
+    <!-- Instructions for using the SIM PIN unlock screen when there's more than one SIM -->
+    <string name="kg_sim_pin_instructions_multi">Enter SIM PIN for \"<xliff:g id="carrier" example="CARD 1">%1$s</xliff:g>\"</string>
     <!-- Instructions for using the PIN unlock screen -->
     <string name="kg_pin_instructions">Enter PIN</string>
     <!-- Instructions for using the password unlock screen -->
     <string name="kg_password_instructions">Enter Password</string>
     <!-- Hint shown in the PUK screen that asks the user to enter the PUK code given to them by their provider -->
     <string name="kg_puk_enter_puk_hint">SIM is now disabled. Enter PUK code to continue. Contact carrier for details.</string>
+    <!-- Hint shown when there are multiple SIMs in the device to ask the user to enter the PUK code given to them by their provider -->
+    <string name="kg_puk_enter_puk_hint_multi">SIM \"<xliff:g id="carrier" example="CARD 1">%1$s</xliff:g>\" is now disabled. Enter PUK code to continue. Contact carrier for details.</string>
     <!-- Hint shown in the PUK unlock screen PIN TextView -->
     <string name="kg_puk_enter_pin_hint">Enter desired PIN code</string>
     <!-- Message shown when the user needs to confirm the PIN they just entered in the PUK screen -->
@@ -287,28 +300,76 @@
         You have incorrectly drawn your unlock pattern <xliff:g id="number">%d</xliff:g> times.
         \n\nTry again in <xliff:g id="number">%d</xliff:g> seconds.
     </string>
-    <!-- Message shown when user is almost at the limit of password attempts where the device will be wiped. -->
+
+    <!-- Message shown when user is almost at the limit of password attempts where the device will be wiped. [CHAR LIMIT=none] -->
     <string name="kg_failed_attempts_almost_at_wipe" product="tablet">
        You have incorrectly attempted to unlock the tablet <xliff:g id="number">%d</xliff:g> times.
        After <xliff:g id="number">%d</xliff:g> more unsuccessful attempts,
-       the tablet will be reset to factory default and all user data will be lost.
+       this tablet will be reset, which will delete all its data.
     </string>
-    <!-- Message shown when user is almost at the limit of password attempts where the device will be wiped. -->
+    <!-- Message shown when user is almost at the limit of password attempts where the device will be wiped. [CHAR LIMIT=none] -->
     <string name="kg_failed_attempts_almost_at_wipe" product="default">
        You have incorrectly attempted to unlock the phone <xliff:g id="number">%d</xliff:g> times.
        After <xliff:g id="number">%d</xliff:g> more unsuccessful attempts,
-       the phone will be reset to factory default and all user data will be lost.
+       this phone will be reset, which will delete all its data.
     </string>
-    <!-- Message shown in dialog when user has exceeded the maximum attempts and the device will now be wiped -->
+    <!-- Message shown in dialog when user has exceeded the maximum attempts and the device will now be wiped [CHAR LIMIT=none] -->
     <string name="kg_failed_attempts_now_wiping" product="tablet">
        You have incorrectly attempted to unlock the tablet <xliff:g id="number">%d</xliff:g> times.
-       The tablet will now be reset to factory default.
+       This tablet will be reset, which will delete all its data.
     </string>
-    <!-- Message shown in dialog when user has exceeded the maximum attempts and the device will now be wiped -->
+    <!-- Message shown in dialog when user has exceeded the maximum attempts and the device will now be wiped [CHAR LIMIT=none] -->
     <string name="kg_failed_attempts_now_wiping" product="default">
        You have incorrectly attempted to unlock the phone <xliff:g id="number">%d</xliff:g> times.
-       The phone will now be reset to factory default.
+       This phone will be reset, which will delete all its data.
     </string>
+
+    <!-- Message shown when user is almost at the limit of password attempts where the user will be removed. [CHAR LIMIT=none] -->
+    <string name="kg_failed_attempts_almost_at_erase_user" product="tablet">
+       You have incorrectly attempted to unlock the tablet <xliff:g id="number">%d</xliff:g> times.
+       After <xliff:g id="number">%d</xliff:g> more unsuccessful attempts,
+       this user will be removed, which will delete all user data.
+    </string>
+    <!-- Message shown when user is almost at the limit of password attempts where the user will be removed. [CHAR LIMIT=none] -->
+    <string name="kg_failed_attempts_almost_at_erase_user" product="default">
+       You have incorrectly attempted to unlock the phone <xliff:g id="number">%d</xliff:g> times.
+       After <xliff:g id="number">%d</xliff:g> more unsuccessful attempts,
+       this user will be removed, which will delete all user data.
+    </string>
+    <!-- Message shown in dialog when user has exceeded the maximum attempts and the user will be removed. [CHAR LIMIT=none] -->
+    <string name="kg_failed_attempts_now_erasing_user" product="tablet">
+       You have incorrectly attempted to unlock the tablet <xliff:g id="number">%d</xliff:g> times.
+       This user will be removed, which will delete all user data.
+    </string>
+    <!-- Message shown in dialog when user has exceeded the maximum attempts and the user will be removed. [CHAR LIMIT=none] -->
+    <string name="kg_failed_attempts_now_erasing_user" product="default">
+       You have incorrectly attempted to unlock the phone <xliff:g id="number">%d</xliff:g> times.
+       This user will be removed, which will delete all user data.
+    </string>
+
+    <!-- Message shown when user is almost at the limit of password attempts where the profile will be removed. [CHAR LIMIT=none] -->
+    <string name="kg_failed_attempts_almost_at_erase_profile" product="tablet">
+       You have incorrectly attempted to unlock the tablet <xliff:g id="number">%d</xliff:g> times.
+       After <xliff:g id="number">%d</xliff:g> more unsuccessful attempts,
+       the work profile will be removed, which will delete all profile data.
+    </string>
+    <!-- Message shown when user is almost at the limit of password attempts where the profile will be removed. [CHAR LIMIT=none] -->
+    <string name="kg_failed_attempts_almost_at_erase_profile" product="default">
+       You have incorrectly attempted to unlock the phone <xliff:g id="number">%d</xliff:g> times.
+       After <xliff:g id="number">%d</xliff:g> more unsuccessful attempts,
+       the work profile will be removed, which will delete all profile data.
+    </string>
+    <!-- Message shown in dialog when user has exceeded the maximum attempts and the profile will be removed. [CHAR LIMIT=none] -->
+    <string name="kg_failed_attempts_now_erasing_profile" product="tablet">
+       You have incorrectly attempted to unlock the tablet <xliff:g id="number">%d</xliff:g> times.
+       The work profile will be removed, which will delete all profile data.
+    </string>
+    <!-- Message shown in dialog when user has exceeded the maximum attempts and the profile will be removed. [CHAR LIMIT=none] -->
+    <string name="kg_failed_attempts_now_erasing_profile" product="default">
+       You have incorrectly attempted to unlock the phone <xliff:g id="number">%d</xliff:g> times.
+       The work profile will be removed, which will delete all profile data.
+    </string>
+
     <!-- Message shown in dialog when user is almost at the limit where they will be
     locked out and may have to enter an alternate username/password to unlock the phone -->
     <string name="kg_failed_attempts_almost_at_login" product="tablet">
@@ -325,9 +386,6 @@
        you will be asked to unlock your phone using an email account.\n\n
        Try again in <xliff:g id="number">%d</xliff:g> seconds.
     </string>
-    <!-- Sequence of characters used to separate message strings in keyguard. Typically just em-dash
-         with spaces on either side. [CHAR LIMIT=3] -->
-    <string name="kg_text_message_separator" product="default">" \u2014 "</string>
     <!-- The delete-widget drop target button text -->
     <string name="kg_reordering_delete_drop_target_text">Remove</string>
 

@@ -19,14 +19,15 @@ package com.android.layoutlib.bridge;
 import static com.android.ide.common.rendering.api.Result.Status.ERROR_UNKNOWN;
 import static com.android.ide.common.rendering.api.Result.Status.SUCCESS;
 
+import com.android.annotations.NonNull;
 import com.android.ide.common.rendering.api.Capability;
 import com.android.ide.common.rendering.api.DrawableParams;
+import com.android.ide.common.rendering.api.Features;
 import com.android.ide.common.rendering.api.LayoutLog;
 import com.android.ide.common.rendering.api.RenderSession;
 import com.android.ide.common.rendering.api.Result;
 import com.android.ide.common.rendering.api.Result.Status;
 import com.android.ide.common.rendering.api.SessionParams;
-import com.android.layoutlib.bridge.impl.FontLoader;
 import com.android.layoutlib.bridge.impl.RenderDrawable;
 import com.android.layoutlib.bridge.impl.RenderSessionImpl;
 import com.android.layoutlib.bridge.util.DynamicIdMap;
@@ -36,10 +37,11 @@ import com.android.tools.layoutlib.create.MethodAdapter;
 import com.android.tools.layoutlib.create.OverrideMethod;
 import com.android.util.Pair;
 import com.ibm.icu.util.ULocale;
+import libcore.io.MemoryMappedFile_Delegate;
 
 import android.content.res.BridgeAssetManager;
 import android.graphics.Bitmap;
-import android.graphics.Typeface_Accessor;
+import android.graphics.FontFamily_Delegate;
 import android.graphics.Typeface_Delegate;
 import android.os.Looper;
 import android.os.Looper_Accessor;
@@ -61,7 +63,7 @@ import java.util.concurrent.locks.ReentrantLock;
 /**
  * Main entry point of the LayoutLib Bridge.
  * <p/>To use this bridge, simply instantiate an object of type {@link Bridge} and call
- * {@link #createScene(SceneParams)}
+ * {@link #createSession(SessionParams)}
  */
 public final class Bridge extends com.android.ide.common.rendering.api.Bridge {
 
@@ -147,8 +149,7 @@ public final class Bridge extends com.android.ide.common.rendering.api.Bridge {
             if (getClass() != obj.getClass()) return false;
 
             IntArray other = (IntArray) obj;
-            if (!Arrays.equals(mArray, other.mArray)) return false;
-            return true;
+            return Arrays.equals(mArray, other.mArray);
         }
     }
 
@@ -180,7 +181,7 @@ public final class Bridge extends com.android.ide.common.rendering.api.Bridge {
      */
     private static LayoutLog sCurrentLog = sDefaultLog;
 
-    private EnumSet<Capability> mCapabilities;
+    private static final int LAST_SUPPORTED_FEATURE = Features.PREFERENCES_RENDERING;
 
     @Override
     public int getApiLevel() {
@@ -188,8 +189,16 @@ public final class Bridge extends com.android.ide.common.rendering.api.Bridge {
     }
 
     @Override
+    @Deprecated
     public EnumSet<Capability> getCapabilities() {
-        return mCapabilities;
+        // The Capability class is deprecated and frozen. All Capabilities enumerated there are
+        // supported by this version of LayoutLibrary. So, it's safe to use EnumSet.allOf()
+        return EnumSet.allOf(Capability.class);
+    }
+
+    @Override
+    public boolean supports(int feature) {
+        return feature <= LAST_SUPPORTED_FEATURE;
     }
 
     @Override
@@ -199,24 +208,6 @@ public final class Bridge extends com.android.ide.common.rendering.api.Bridge {
             LayoutLog log) {
         sPlatformProperties = platformProperties;
         sEnumValueMap = enumValueMap;
-
-        // don't use EnumSet.allOf(), because the bridge doesn't come with its specific version
-        // of layoutlib_api. It is provided by the client which could have a more recent version
-        // with newer, unsupported capabilities.
-        mCapabilities = EnumSet.of(
-                Capability.UNBOUND_RENDERING,
-                Capability.CUSTOM_BACKGROUND_COLOR,
-                Capability.RENDER,
-                Capability.LAYOUT_ONLY,
-                Capability.EMBEDDED_LAYOUT,
-                Capability.VIEW_MANIPULATION,
-                Capability.PLAY_ANIMATION,
-                Capability.ANIMATED_VIEW_MANIPULATION,
-                Capability.ADAPTER_BINDING,
-                Capability.EXTENDED_VIEWINFO,
-                Capability.FIXED_SCALABLE_NINE_PATCH,
-                Capability.RTL);
-
 
         BridgeAssetManager.initSystem();
 
@@ -250,14 +241,8 @@ public final class Bridge extends com.android.ide.common.rendering.api.Bridge {
         }
 
         // load the fonts.
-        FontLoader fontLoader = FontLoader.create(fontLocation.getAbsolutePath());
-        if (fontLoader != null) {
-            Typeface_Delegate.init(fontLoader);
-        } else {
-            log.error(LayoutLog.TAG_BROKEN,
-                    "Failed create FontLoader in layout lib.", null);
-            return false;
-        }
+        FontFamily_Delegate.setFontLocation(fontLocation.getAbsolutePath());
+        MemoryMappedFile_Delegate.setDataDir(fontLocation.getAbsoluteFile().getParentFile());
 
         // now parse com.android.internal.R (and only this one as android.R is a subset of
         // the internal version), and put the content in the maps.
@@ -297,7 +282,7 @@ public final class Bridge extends com.android.ide.common.rendering.api.Bridge {
             if (log != null) {
                 log.error(LayoutLog.TAG_BROKEN,
                         "Failed to load com.android.internal.R from the layout library jar",
-                        throwable);
+                        throwable, null);
             }
             return false;
         }
@@ -310,7 +295,7 @@ public final class Bridge extends com.android.ide.common.rendering.api.Bridge {
         BridgeAssetManager.clearSystem();
 
         // dispose of the default typeface.
-        Typeface_Accessor.resetDefaults();
+        Typeface_Delegate.resetDefaults();
 
         return true;
     }
@@ -425,8 +410,7 @@ public final class Bridge extends com.android.ide.common.rendering.api.Bridge {
             locale = "";
         }
         ULocale uLocale = new ULocale(locale);
-        return uLocale.getCharacterOrientation().equals(ICU_LOCALE_DIRECTION_RTL) ?
-                true : false;
+        return uLocale.getCharacterOrientation().equals(ICU_LOCALE_DIRECTION_RTL);
     }
 
     /**
@@ -467,7 +451,7 @@ public final class Bridge extends com.android.ide.common.rendering.api.Bridge {
 
     public static void setLog(LayoutLog log) {
         // check only the thread currently owning the lock can do this.
-        if (sLock.isHeldByCurrentThread() == false) {
+        if (!sLock.isHeldByCurrentThread()) {
             throw new IllegalStateException("scene must be acquired first. see #acquire(long)");
         }
 
@@ -497,7 +481,6 @@ public final class Bridge extends com.android.ide.common.rendering.api.Bridge {
 
     /**
      * Returns the name of a framework resource whose value is an int array.
-     * @param array
      */
     public static String resolveResourceId(int[] array) {
         sIntArrayWrapper.set(array);
@@ -510,6 +493,7 @@ public final class Bridge extends com.android.ide.common.rendering.api.Bridge {
      * @param name the name of the resource.
      * @return an {@link Integer} containing the resource id, or null if no resource were found.
      */
+    @NonNull
     public static Integer getResourceId(ResourceType type, String name) {
         Map<String, Integer> map = sRevRMap.get(type);
         Integer value = null;
@@ -517,11 +501,8 @@ public final class Bridge extends com.android.ide.common.rendering.api.Bridge {
             value = map.get(name);
         }
 
-        if (value == null) {
-            value = sDynamicIds.getId(type, name);
-        }
+        return value == null ? sDynamicIds.getId(type, name) : value;
 
-        return value;
     }
 
     /**

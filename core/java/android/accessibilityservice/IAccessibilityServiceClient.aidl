@@ -18,6 +18,7 @@ package android.accessibilityservice;
 
 import android.accessibilityservice.IAccessibilityServiceConnection;
 import android.view.accessibility.AccessibilityEvent;
+import android.view.accessibility.AccessibilityWindowInfo;
 import android.view.KeyEvent;
 
 /**
@@ -27,7 +28,7 @@ import android.view.KeyEvent;
  */
  oneway interface IAccessibilityServiceClient {
 
-    void setConnection(in IAccessibilityServiceConnection connection, int connectionId);
+    void init(in IAccessibilityServiceConnection connection, int connectionId, IBinder windowToken);
 
     void onAccessibilityEvent(in AccessibilityEvent event);
 
@@ -35,7 +36,7 @@ import android.view.KeyEvent;
 
     void onGesture(int gesture);
 
-    void clearAccessibilityNodeInfoCache();
+    void clearAccessibilityCache();
 
     void onKeyEvent(in KeyEvent event, int sequence);
 }

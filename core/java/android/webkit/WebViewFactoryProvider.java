@@ -16,7 +16,10 @@
 
 package android.webkit;
 
+import android.annotation.SystemApi;
 import android.content.Context;
+import android.content.Intent;
+import android.net.Uri;
 
 /**
  * This is the main entry-point into the WebView back end implementations, which the WebView
@@ -24,6 +27,7 @@ import android.content.Context;
  * implementation of this interface, and make it available to the WebView via mechanism TBD.
  * @hide
  */
+@SystemApi
 public interface WebViewFactoryProvider {
     /**
      * This Interface provides glue for implementing the backend of WebView static methods which
@@ -35,13 +39,6 @@ public interface WebViewFactoryProvider {
          * {@link android.webkit.WebView#findAddress(String)}
          */
         String findAddress(String addr);
-
-        /**
-         * Implements the API methods:
-         * {@link android.webkit.WebView#enablePlatformNotifications()}
-         * {@link android.webkit.WebView#disablePlatformNotifications()}
-         */
-        void setPlatformNotificationsEnabled(boolean enable);
 
         /**
          * Implements the API method:
@@ -59,6 +56,24 @@ public interface WebViewFactoryProvider {
          * {@link android.webkit.WebView#setWebContentsDebuggingEnabled(boolean) }
          */
         void setWebContentsDebuggingEnabled(boolean enable);
+
+        /**
+         * Implements the API method:
+         * {@link android.webkit.WebView#clearClientCertPreferences(Runnable) }
+         */
+        void clearClientCertPreferences(Runnable onCleared);
+
+        /**
+         * Implements the API method:
+         * {@link android.webkit.WebView#setSlowWholeDocumentDrawEnabled(boolean) }
+         */
+        void enableSlowWholeDocumentDraw();
+
+        /**
+         * Implement the API method
+         * {@link android.webkit.WebChromeClient.FileChooserParams#parseResult(int, Intent)}
+         */
+        Uri[] parseFileChooserResult(int resultCode, Intent intent);
     }
 
     Statics getStatics();

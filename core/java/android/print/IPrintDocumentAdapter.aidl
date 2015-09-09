@@ -37,5 +37,5 @@ oneway interface IPrintDocumentAdapter {
     void write(in PageRange[] pages, in ParcelFileDescriptor fd,
             IWriteResultCallback callback, int sequence);
     void finish();
-    void cancel();
+    void kill(String reason);
 }

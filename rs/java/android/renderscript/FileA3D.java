@@ -17,15 +17,10 @@
 package android.renderscript;
 
 import java.io.File;
-import java.io.IOException;
 import java.io.InputStream;
 
 import android.content.res.AssetManager;
 import android.content.res.Resources;
-import android.graphics.Bitmap;
-import android.graphics.BitmapFactory;
-import android.util.Log;
-import android.util.TypedValue;
 
 /**
  * @hide
@@ -150,6 +145,9 @@ public class FileA3D extends BaseObj {
             case MESH:
                 entry.mLoadedObj = new Mesh(objectID, rs);
                 break;
+
+            default:
+                throw new RSRuntimeException("Unrecognized object type in file.");
             }
 
             entry.mLoadedObj.updateFromNative();

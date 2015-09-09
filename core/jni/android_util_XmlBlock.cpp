@@ -19,7 +19,7 @@
 
 #include "jni.h"
 #include "JNIHelp.h"
-#include <android_runtime/AndroidRuntime.h>
+#include <core_jni_helpers.h>
 #include <androidfw/AssetManager.h>
 #include <androidfw/ResourceTypes.h>
 #include <utils/Log.h>
@@ -47,10 +47,11 @@ static jlong android_content_XmlBlock_nativeCreate(JNIEnv* env, jobject clazz,
     }
 
     jbyte* b = env->GetByteArrayElements(bArray, NULL);
-    ResXMLTree* osb = new ResXMLTree(b+off, len, true);
+    ResXMLTree* osb = new ResXMLTree();
+    osb->setTo(b+off, len, true);
     env->ReleaseByteArrayElements(bArray, b, 0);
 
-    if (osb == NULL || osb->getError() != NO_ERROR) {
+    if (osb->getError() != NO_ERROR) {
         jniThrowException(env, "java/lang/IllegalArgumentException", NULL);
         return 0;
     }
@@ -113,6 +114,8 @@ static jint android_content_XmlBlock_nativeNext(JNIEnv* env, jobject clazz,
                 return 1;
             case ResXMLParser::BAD_DOCUMENT:
                 goto bad;
+            default:
+                break;
         }
     } while (true);
 
@@ -264,19 +267,20 @@ static jint android_content_XmlBlock_nativeGetAttributeIndex(JNIEnv* env, jobjec
     const char16_t* ns16 = NULL;
     jsize nsLen = 0;
     if (ns) {
-        ns16 = env->GetStringChars(ns, NULL);
+        ns16 = reinterpret_cast<const char16_t*>(env->GetStringChars(ns, NULL));
         nsLen = env->GetStringLength(ns);
     }
 
-    const char16_t* name16 = env->GetStringChars(name, NULL);
+    const char16_t* name16 = reinterpret_cast<const char16_t*>(
+        env->GetStringChars(name, NULL));
     jsize nameLen = env->GetStringLength(name);
 
     jint idx = static_cast<jint>(st->indexOfAttribute(ns16, nsLen, name16, nameLen));
 
     if (ns) {
-        env->ReleaseStringChars(ns, ns16);
+        env->ReleaseStringChars(ns, reinterpret_cast<const jchar*>(ns16));
     }
-    env->ReleaseStringChars(name, name16);
+    env->ReleaseStringChars(name, reinterpret_cast<const jchar*>(name16));
 
     return idx;
 }
@@ -408,7 +412,7 @@ static JNINativeMethod gXmlBlockMethods[] = {
 
 int register_android_content_XmlBlock(JNIEnv* env)
 {
-    return AndroidRuntime::registerNativeMethods(env,
+    return RegisterMethodsOrDie(env,
             "android/content/res/XmlBlock", gXmlBlockMethods, NELEM(gXmlBlockMethods));
 }
 

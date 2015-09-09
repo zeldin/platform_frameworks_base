@@ -16,9 +16,6 @@
 
 package android.content;
 
-import android.app.Activity;
-import android.app.ActivityManagerNative;
-import android.app.LoadedApk;
 import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageManager;
 import android.content.res.AssetManager;
@@ -32,8 +29,8 @@ import android.graphics.drawable.Drawable;
 import android.net.Uri;
 import android.os.Bundle;
 import android.os.Handler;
+import android.os.IBinder;
 import android.os.Looper;
-import android.os.RemoteException;
 import android.os.UserHandle;
 import android.view.DisplayAdjustments;
 import android.view.Display;
@@ -204,7 +201,12 @@ public class ContextWrapper extends Context {
     public File getFilesDir() {
         return mBase.getFilesDir();
     }
-    
+
+    @Override
+    public File getNoBackupFilesDir() {
+        return mBase.getNoBackupFilesDir();
+    }
+
     @Override
     public File getExternalFilesDir(String type) {
         return mBase.getExternalFilesDir(type);
@@ -231,6 +233,11 @@ public class ContextWrapper extends Context {
     }
 
     @Override
+    public File getCodeCacheDir() {
+        return mBase.getCodeCacheDir();
+    }
+
+    @Override
     public File getExternalCacheDir() {
         return mBase.getExternalCacheDir();
     }
@@ -238,6 +245,11 @@ public class ContextWrapper extends Context {
     @Override
     public File[] getExternalCacheDirs() {
         return mBase.getExternalCacheDirs();
+    }
+
+    @Override
+    public File[] getExternalMediaDirs() {
+        return mBase.getExternalMediaDirs();
     }
 
     @Override
@@ -422,6 +434,16 @@ public class ContextWrapper extends Context {
                 scheduler, initialCode, initialData, initialExtras);
     }
 
+    /** @hide */
+    @Override
+    public void sendOrderedBroadcastAsUser(Intent intent, UserHandle user,
+            String receiverPermission, int appOp, BroadcastReceiver resultReceiver,
+            Handler scheduler,
+            int initialCode, String initialData, Bundle initialExtras) {
+        mBase.sendOrderedBroadcastAsUser(intent, user, receiverPermission, appOp, resultReceiver,
+                scheduler, initialCode, initialData, initialExtras);
+    }
+
     @Override
     public void sendStickyBroadcast(Intent intent) {
         mBase.sendStickyBroadcast(intent);
@@ -545,6 +567,12 @@ public class ContextWrapper extends Context {
         return mBase.checkPermission(permission, pid, uid);
     }
 
+    /** @hide */
+    @Override
+    public int checkPermission(String permission, int pid, int uid, IBinder callerToken) {
+        return mBase.checkPermission(permission, pid, uid, callerToken);
+    }
+
     @Override
     public int checkCallingPermission(String permission) {
         return mBase.checkCallingPermission(permission);
@@ -585,6 +613,12 @@ public class ContextWrapper extends Context {
     @Override
     public int checkUriPermission(Uri uri, int pid, int uid, int modeFlags) {
         return mBase.checkUriPermission(uri, pid, uid, modeFlags);
+    }
+
+    /** @hide */
+    @Override
+    public int checkUriPermission(Uri uri, int pid, int uid, int modeFlags, IBinder callerToken) {
+        return mBase.checkUriPermission(uri, pid, uid, modeFlags, callerToken);
     }
 
     @Override
@@ -642,6 +676,12 @@ public class ContextWrapper extends Context {
     public Context createPackageContextAsUser(String packageName, int flags, UserHandle user)
             throws PackageManager.NameNotFoundException {
         return mBase.createPackageContextAsUser(packageName, flags, user);
+    }
+
+    /** @hide */
+    public Context createApplicationContext(ApplicationInfo application,
+            int flags) throws PackageManager.NameNotFoundException {
+        return mBase.createApplicationContext(application, flags);
     }
 
     /** @hide */

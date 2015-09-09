@@ -16,6 +16,7 @@
 
 package android.widget;
 
+import android.app.ActivityManager;
 import android.content.BroadcastReceiver;
 import android.content.ContentResolver;
 import android.content.Context;
@@ -26,6 +27,7 @@ import android.database.ContentObserver;
 import android.net.Uri;
 import android.os.Handler;
 import android.os.SystemClock;
+import android.os.UserHandle;
 import android.provider.Settings;
 import android.text.format.DateFormat;
 import android.util.AttributeSet;
@@ -127,6 +129,8 @@ public class TextClock extends TextView {
     private Calendar mTime;
     private String mTimeZone;
 
+    private boolean mShowCurrentUserTime;
+
     private final ContentObserver mFormatChangeObserver = new ContentObserver(new Handler()) {
         @Override
         public void onChange(boolean selfChange) {
@@ -198,15 +202,19 @@ public class TextClock extends TextView {
      * @param context The Context the view is running in, through which it can
      *        access the current theme, resources, etc.
      * @param attrs The attributes of the XML tag that is inflating the view
-     * @param defStyle The default style to apply to this view. If 0, no style
-     *        will be applied (beyond what is included in the theme). This may
-     *        either be an attribute resource, whose value will be retrieved
-     *        from the current theme, or an explicit style resource
+     * @param defStyleAttr An attribute in the current theme that contains a
+     *        reference to a style resource that supplies default values for
+     *        the view. Can be 0 to not look for defaults.
      */
-    public TextClock(Context context, AttributeSet attrs, int defStyle) {
-        super(context, attrs, defStyle);
+    public TextClock(Context context, AttributeSet attrs, int defStyleAttr) {
+        this(context, attrs, defStyleAttr, 0);
+    }
 
-        TypedArray a = context.obtainStyledAttributes(attrs, R.styleable.TextClock, defStyle, 0);
+    public TextClock(Context context, AttributeSet attrs, int defStyleAttr, int defStyleRes) {
+        super(context, attrs, defStyleAttr, defStyleRes);
+
+        final TypedArray a = context.obtainStyledAttributes(
+                attrs, R.styleable.TextClock, defStyleAttr, defStyleRes);
         try {
             mFormat12 = a.getText(R.styleable.TextClock_format12Hour);
             mFormat24 = a.getText(R.styleable.TextClock_format24Hour);
@@ -222,10 +230,10 @@ public class TextClock extends TextView {
         if (mFormat12 == null || mFormat24 == null) {
             LocaleData ld = LocaleData.get(getContext().getResources().getConfiguration().locale);
             if (mFormat12 == null) {
-                mFormat12 = ld.timeFormat12;
+                mFormat12 = ld.timeFormat_hm;
             }
             if (mFormat24 == null) {
-                mFormat24 = ld.timeFormat24;
+                mFormat24 = ld.timeFormat_Hm;
             }
         }
 
@@ -338,6 +346,22 @@ public class TextClock extends TextView {
     }
 
     /**
+     * Sets whether this clock should always track the current user and not the user of the
+     * current process. This is used for single instance processes like the systemUI who need
+     * to display time for different users.
+     *
+     * @hide
+     */
+    public void setShowCurrentUserTime(boolean showCurrentUserTime) {
+        mShowCurrentUserTime = showCurrentUserTime;
+
+        chooseFormat();
+        onTimeChanged();
+        unregisterObserver();
+        registerObserver();
+    }
+
+    /**
      * Indicates whether the system is currently using the 24-hour mode.
      *
      * When the system is in 24-hour mode, this view will use the pattern
@@ -356,7 +380,11 @@ public class TextClock extends TextView {
      * @see #getFormat24Hour()
      */
     public boolean is24HourModeEnabled() {
-        return DateFormat.is24HourFormat(getContext());
+        if (mShowCurrentUserTime) {
+            return DateFormat.is24HourFormat(getContext(), ActivityManager.getCurrentUser());
+        } else {
+            return DateFormat.is24HourFormat(getContext());
+        }
     }
 
     /**
@@ -429,9 +457,9 @@ public class TextClock extends TextView {
         LocaleData ld = LocaleData.get(getContext().getResources().getConfiguration().locale);
 
         if (format24Requested) {
-            mFormat = abc(mFormat24, mFormat12, ld.timeFormat24);
+            mFormat = abc(mFormat24, mFormat12, ld.timeFormat_Hm);
         } else {
-            mFormat = abc(mFormat12, mFormat24, ld.timeFormat12);
+            mFormat = abc(mFormat12, mFormat24, ld.timeFormat_hm);
         }
 
         boolean hadSeconds = mHasSeconds;
@@ -496,7 +524,13 @@ public class TextClock extends TextView {
 
     private void registerObserver() {
         final ContentResolver resolver = getContext().getContentResolver();
-        resolver.registerContentObserver(Settings.System.CONTENT_URI, true, mFormatChangeObserver);
+        if (mShowCurrentUserTime) {
+            resolver.registerContentObserver(Settings.System.CONTENT_URI, true,
+                    mFormatChangeObserver, UserHandle.USER_ALL);
+        } else {
+            resolver.registerContentObserver(Settings.System.CONTENT_URI, true,
+                    mFormatChangeObserver);
+        }
     }
 
     private void unregisterReceiver() {

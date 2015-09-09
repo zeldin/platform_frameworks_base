@@ -19,9 +19,12 @@ package android.media;
 import java.nio.ByteBuffer;
 import java.lang.AutoCloseable;
 
+import android.graphics.Rect;
+
 /**
  * <p>A single complete image buffer to use with a media source such as a
- * {@link MediaCodec}.</p>
+ * {@link MediaCodec} or a
+ * {@link android.hardware.camera2.CameraDevice CameraDevice}.</p>
  *
  * <p>This class allows for efficient direct application access to the pixel
  * data of the Image through one or more
@@ -82,6 +85,15 @@ public abstract class Image implements AutoCloseable {
      *     plane (4:2:0 subsampling). Each pixel sample in each plane has 8 bits.
      *     Each plane has its own row stride and pixel stride.</td>
      * </tr>
+     * <tr>
+     *   <td>{@link android.graphics.ImageFormat#RAW_SENSOR RAW_SENSOR}</td>
+     *   <td>1</td>
+     *   <td>A single plane of raw sensor image data, with 16 bits per color
+     *     sample. The details of the layout need to be queried from the source of
+     *     the raw sensor data, such as
+     *     {@link android.hardware.camera2.CameraDevice CameraDevice}.
+     *   </td>
+     * </tr>
      * </table>
      *
      * @see android.graphics.ImageFormat
@@ -110,6 +122,36 @@ public abstract class Image implements AutoCloseable {
      * </p>
      */
     public abstract long getTimestamp();
+
+    private Rect mCropRect;
+
+    /**
+     * Get the crop rectangle associated with this frame.
+     * <p>
+     * The crop rectangle specifies the region of valid pixels in the image,
+     * using coordinates in the largest-resolution plane.
+     */
+    public Rect getCropRect() {
+        if (mCropRect == null) {
+            return new Rect(0, 0, getWidth(), getHeight());
+        } else {
+            return new Rect(mCropRect); // return a copy
+        }
+    }
+
+    /**
+     * Set the crop rectangle associated with this frame.
+     * <p>
+     * The crop rectangle specifies the region of valid pixels in the image,
+     * using coordinates in the largest-resolution plane.
+     */
+    public void setCropRect(Rect cropRect) {
+        if (cropRect != null) {
+            cropRect = new Rect(cropRect);  // make a copy
+            cropRect.intersect(0, 0, getWidth(), getHeight());
+        }
+        mCropRect = cropRect;
+    }
 
     /**
      * Get the array of pixel planes for this Image. The number of planes is
@@ -171,6 +213,11 @@ public abstract class Image implements AutoCloseable {
          * {@link java.nio.ByteBuffer#isDirect isDirect} return {@code true}, so
          * the underlying data could be mapped as a pointer in JNI without doing
          * any copies with {@code GetDirectBufferAddress}.</p>
+         *
+         * <p>For raw formats, each plane is only guaranteed to contain data
+         * up to the last pixel in the last row. In other words, the stride
+         * after the last row may not be mapped into the buffer. This is a
+         * necessary requirement for any interleaved format.</p>
          *
          * @return the byte buffer containing the image data for this plane.
          */

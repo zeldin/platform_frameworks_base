@@ -14,11 +14,13 @@
  * limitations under the License.
  */
 
+#include <sys/resource.h>
 #include <sys/sysinfo.h>
 
+#include "TaskManager.h"
 #include "Task.h"
 #include "TaskProcessor.h"
-#include "TaskManager.h"
+#include "utils/MathUtils.h"
 
 namespace android {
 namespace uirenderer {
@@ -31,7 +33,8 @@ TaskManager::TaskManager() {
     // Get the number of available CPUs. This value does not change over time.
     int cpuCount = sysconf(_SC_NPROCESSORS_CONF);
 
-    for (int i = 0; i < cpuCount / 2; i++) {
+    int workerCount = MathUtils::max(1, cpuCount / 2);
+    for (int i = 0; i < workerCount; i++) {
         String8 name;
         name.appendFormat("hwuiTask%d", i + 1);
         mThreads.add(new WorkerThread(name));
@@ -77,6 +80,11 @@ bool TaskManager::addTaskBase(const sp<TaskBase>& task, const sp<TaskProcessorBa
 // Thread
 ///////////////////////////////////////////////////////////////////////////////
 
+status_t TaskManager::WorkerThread::readyToRun() {
+    setpriority(PRIO_PROCESS, 0, PRIORITY_FOREGROUND);
+    return NO_ERROR;
+}
+
 bool TaskManager::WorkerThread::threadLoop() {
     mSignal.wait();
     Vector<TaskWrapper> tasks;
@@ -97,6 +105,8 @@ bool TaskManager::WorkerThread::threadLoop() {
 bool TaskManager::WorkerThread::addTask(TaskWrapper task) {
     if (!isRunning()) {
         run(mName.string(), PRIORITY_DEFAULT);
+    } else if (exitPending()) {
+        return false;
     }
 
     Mutex::Autolock l(mLock);
@@ -112,10 +122,6 @@ size_t TaskManager::WorkerThread::getTaskCount() const {
 }
 
 void TaskManager::WorkerThread::exit() {
-    {
-        Mutex::Autolock l(mLock);
-        mTasks.clear();
-    }
     requestExit();
     mSignal.signal();
 }

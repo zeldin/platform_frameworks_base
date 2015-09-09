@@ -46,11 +46,11 @@ oneway interface IWindow {
     void executeCommand(String command, String parameters, in ParcelFileDescriptor descriptor);
 
     void resized(in Rect frame, in Rect overscanInsets, in Rect contentInsets,
-            in Rect visibleInsets, boolean reportDraw, in Configuration newConfig);
+            in Rect visibleInsets, in Rect stableInsets, boolean reportDraw,
+            in Configuration newConfig);
     void moved(int newX, int newY);
     void dispatchAppVisibility(boolean visible);
     void dispatchGetNewSurface();
-    void dispatchScreenState(boolean on);
 
     /**
      * Tell the window that it is either gaining or losing focus.  Keep it up
@@ -85,4 +85,9 @@ oneway interface IWindow {
      * is done.
      */
     void doneAnimating();
+
+    /**
+     * Called for non-application windows when the enter animation has completed.
+     */
+    void dispatchWindowShown();
 }

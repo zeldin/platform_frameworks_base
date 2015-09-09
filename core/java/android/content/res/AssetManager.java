@@ -17,8 +17,8 @@
 package android.content.res;
 
 import android.os.ParcelFileDescriptor;
-import android.os.Trace;
 import android.util.Log;
+import android.util.SparseArray;
 import android.util.TypedValue;
 
 import java.io.FileNotFoundException;
@@ -33,7 +33,7 @@ import java.util.HashMap;
  * files that have been bundled with the application as a simple stream of
  * bytes.
  */
-public final class AssetManager {
+public final class AssetManager implements AutoCloseable {
     /* modes used when opening an asset */
 
     /**
@@ -100,7 +100,7 @@ public final class AssetManager {
         synchronized (sSync) {
             if (sSystem == null) {
                 AssetManager system = new AssetManager(true);
-                system.makeStringBlocks(false);
+                system.makeStringBlocks(null);
                 sSystem = system;
             }
         }
@@ -246,32 +246,30 @@ public final class AssetManager {
         if (mStringBlocks == null) {
             synchronized (this) {
                 if (mStringBlocks == null) {
-                    makeStringBlocks(true);
+                    makeStringBlocks(sSystem.mStringBlocks);
                 }
             }
         }
     }
 
-    /*package*/ final void makeStringBlocks(boolean copyFromSystem) {
-        final int sysNum = copyFromSystem ? sSystem.mStringBlocks.length : 0;
+    /*package*/ final void makeStringBlocks(StringBlock[] seed) {
+        final int seedNum = (seed != null) ? seed.length : 0;
         final int num = getStringBlockCount();
         mStringBlocks = new StringBlock[num];
         if (localLOGV) Log.v(TAG, "Making string blocks for " + this
                 + ": " + num);
         for (int i=0; i<num; i++) {
-            if (i < sysNum) {
-                mStringBlocks[i] = sSystem.mStringBlocks[i];
+            if (i < seedNum) {
+                mStringBlocks[i] = seed[i];
             } else {
                 mStringBlocks[i] = new StringBlock(getNativeStringBlock(i), true);
             }
         }
     }
 
-    /*package*/ final CharSequence getPooledString(int block, int id) {
-        //System.out.println("Get pooled: block=" + block
-        //                   + ", id=#" + Integer.toHexString(id)
-        //                   + ", blocks=" + mStringBlocks);
-        return mStringBlocks[block-1].get(id);
+    /*package*/ final CharSequence getPooledStringForCookie(int cookie, int id) {
+        // Cookies map to string blocks starting at 1.
+        return mStringBlocks[cookie - 1].get(id);
     }
 
     /**
@@ -536,6 +534,9 @@ public final class AssetManager {
     }
     
     public final class AssetInputStream extends InputStream {
+        /**
+         * @hide
+         */
         public final int getAssetInt() {
             throw new UnsupportedOperationException();
         }
@@ -609,8 +610,11 @@ public final class AssetManager {
      * {@hide}
      */
     public final int addAssetPath(String path) {
-        int res = addAssetPathNative(path);
-        return res;
+        synchronized (this) {
+            int res = addAssetPathNative(path);
+            makeStringBlocks(mStringBlocks);
+            return res;
+        }
     }
 
     private native final int addAssetPathNative(String path);
@@ -623,7 +627,21 @@ public final class AssetManager {
      *
      * {@hide}
      */
-    public native final int addOverlayPath(String idmapPath);
+
+    public final int addOverlayPath(String idmapPath) {
+        synchronized (this) {
+            int res = addOverlayPathNative(idmapPath);
+            makeStringBlocks(mStringBlocks);
+            return res;
+        }
+    }
+
+    /**
+     * See addOverlayPath.
+     *
+     * {@hide}
+     */
+    public native final int addOverlayPathNative(String idmapPath);
 
     /**
      * Add multiple sets of assets to the asset manager at once.  See
@@ -662,6 +680,14 @@ public final class AssetManager {
 
     /**
      * Get the locales that this asset manager contains data for.
+     *
+     * <p>On SDK 21 (Android 5.0: Lollipop) and above, Locale strings are valid
+     * <a href="https://tools.ietf.org/html/bcp47">BCP-47</a> language tags and can be
+     * parsed using {@link java.util.Locale#forLanguageTag(String)}.
+     *
+     * <p>On SDK 20 (Android 4.4W: Kitkat for watches) and below, locale strings
+     * are of the form {@code ll_CC} where {@code ll} is a two letter language code,
+     * and {@code CC} is a two letter country code.
      */
     public native final String[] getLocales();
 
@@ -720,6 +746,9 @@ public final class AssetManager {
     /*package*/ native static final boolean applyStyle(long theme,
             int defStyleAttr, int defStyleRes, long xmlParser,
             int[] inAttrs, int[] outValues, int[] outIndices);
+    /*package*/ native static final boolean resolveAttrs(long theme,
+            int defStyleAttr, int defStyleRes, int[] inValues,
+            int[] inAttrs, int[] outValues, int[] outIndices);
     /*package*/ native final boolean retrieveAttributes(
             long xmlParser, int[] inAttrs, int[] outValues, int[] outIndices);
     /*package*/ native final int getArraySize(int resource);
@@ -731,6 +760,11 @@ public final class AssetManager {
      * {@hide}
      */
     public native final String getCookieName(int cookie);
+
+    /**
+     * {@hide}
+     */
+    public native final SparseArray<String> getAssignedPackageIdentifiers();
 
     /**
      * {@hide}
@@ -761,6 +795,7 @@ public final class AssetManager {
     private native final String[] getArrayStringResource(int arrayRes);
     private native final int[] getArrayStringInfo(int arrayRes);
     /*package*/ native final int[] getArrayIntResource(int arrayRes);
+    /*package*/ native final int[] getStyleAttributes(int themeRes);
 
     private native final void init(boolean isSystem);
     private native final void destroy();

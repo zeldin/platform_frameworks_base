@@ -24,10 +24,10 @@ import android.content.pm.PackageManager;
 import android.content.pm.ResolveInfo;
 import android.os.Parcel;
 import android.os.Parcelable;
-import android.os.SystemClock;
 import android.os.SystemProperties;
 import android.provider.Settings;
 import android.util.Printer;
+import android.util.Slog;
 import com.android.internal.util.FastPrintWriter;
 
 import java.io.PrintWriter;
@@ -168,10 +168,20 @@ public class ApplicationErrorReport implements Parcelable {
         PackageManager pm = context.getPackageManager();
 
         // look for receiver in the installer package
-        String candidate = pm.getInstallerPackageName(packageName);
-        ComponentName result = getErrorReportReceiver(pm, packageName, candidate);
-        if (result != null) {
-            return result;
+        String candidate = null;
+        ComponentName result = null;
+
+        try {
+            candidate = pm.getInstallerPackageName(packageName);
+        } catch (IllegalArgumentException e) {
+            // the package could already removed
+        }
+
+        if (candidate != null) {
+            result = getErrorReportReceiver(pm, packageName, candidate);
+            if (result != null) {
+                return result;
+            }
         }
 
         // if the error app is on the system image, look for system apps
@@ -225,10 +235,13 @@ public class ApplicationErrorReport implements Parcelable {
         dest.writeString(processName);
         dest.writeLong(time);
         dest.writeInt(systemApp ? 1 : 0);
+        dest.writeInt(crashInfo != null ? 1 : 0);
 
         switch (type) {
             case TYPE_CRASH:
-                crashInfo.writeToParcel(dest, flags);
+                if (crashInfo != null) {
+                    crashInfo.writeToParcel(dest, flags);
+                }
                 break;
             case TYPE_ANR:
                 anrInfo.writeToParcel(dest, flags);
@@ -249,10 +262,11 @@ public class ApplicationErrorReport implements Parcelable {
         processName = in.readString();
         time = in.readLong();
         systemApp = in.readInt() == 1;
+        boolean hasCrashInfo = in.readInt() == 1;
 
         switch (type) {
             case TYPE_CRASH:
-                crashInfo = new CrashInfo(in);
+                crashInfo = hasCrashInfo ? new CrashInfo(in) : null;
                 anrInfo = null;
                 batteryInfo = null;
                 runningServiceInfo = null;
@@ -379,6 +393,7 @@ public class ApplicationErrorReport implements Parcelable {
          * Save a CrashInfo instance to a parcel.
          */
         public void writeToParcel(Parcel dest, int flags) {
+            int start = dest.dataPosition();
             dest.writeString(exceptionClassName);
             dest.writeString(exceptionMessage);
             dest.writeString(throwFileName);
@@ -386,6 +401,16 @@ public class ApplicationErrorReport implements Parcelable {
             dest.writeString(throwMethodName);
             dest.writeInt(throwLineNumber);
             dest.writeString(stackTrace);
+            int total = dest.dataPosition()-start;
+            if (total > 20*1024) {
+                Slog.d("Error", "ERR: exClass=" + exceptionClassName);
+                Slog.d("Error", "ERR: exMsg=" + exceptionMessage);
+                Slog.d("Error", "ERR: file=" + throwFileName);
+                Slog.d("Error", "ERR: class=" + throwClassName);
+                Slog.d("Error", "ERR: method=" + throwMethodName + " line=" + throwLineNumber);
+                Slog.d("Error", "ERR: stack=" + stackTrace);
+                Slog.d("Error", "ERR: TOTAL BYTES WRITTEN: " + (dest.dataPosition()-start));
+            }
         }
 
         /**

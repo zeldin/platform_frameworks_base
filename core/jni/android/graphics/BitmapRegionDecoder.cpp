@@ -30,7 +30,7 @@
 #include "Utils.h"
 #include "JNIHelp.h"
 
-#include <android_runtime/AndroidRuntime.h>
+#include "core_jni_helpers.h"
 #include "android_util_Binder.h"
 #include "android_nio_utils.h"
 #include "CreateJavaOutputStreamAdaptor.h"
@@ -39,12 +39,6 @@
 #include <jni.h>
 #include <androidfw/Asset.h>
 #include <sys/stat.h>
-
-#if 0
-    #define TRACE_BITMAP(code)  code
-#else
-    #define TRACE_BITMAP(code)
-#endif
 
 using namespace android;
 
@@ -60,9 +54,9 @@ public:
     }
 
     bool decodeRegion(SkBitmap* bitmap, const SkIRect& rect,
-                      SkBitmap::Config pref, int sampleSize) {
+                      SkColorType pref, int sampleSize) {
         fDecoder->setSampleSize(sampleSize);
-        return fDecoder->decodeRegion(bitmap, rect, pref);
+        return fDecoder->decodeSubset(bitmap, rect, pref);
     }
 
     SkImageDecoder* getDecoder() const { return fDecoder; }
@@ -107,7 +101,7 @@ static jobject nativeNewInstanceFromByteArray(JNIEnv* env, jobject, jbyteArray b
         For now we just always copy the array's data if isShareable.
      */
     AutoJavaByteArray ar(env, byteArray);
-    SkStreamRewindable* stream = new SkMemoryStream(ar.ptr() + offset, length, true);
+    SkMemoryStream* stream = new SkMemoryStream(ar.ptr() + offset, length, true);
 
     jobject brd = createBitmapRegionDecoder(env, stream);
     SkSafeUnref(stream); // the decoder now holds a reference
@@ -175,7 +169,7 @@ static jobject nativeDecodeRegion(JNIEnv* env, jobject, jlong brdHandle,
     jobject tileBitmap = NULL;
     SkImageDecoder *decoder = brd->getDecoder();
     int sampleSize = 1;
-    SkBitmap::Config prefConfig = SkBitmap::kNo_Config;
+    SkColorType prefColorType = kUnknown_SkColorType;
     bool doDither = true;
     bool preferQualityOverSpeed = false;
     bool requireUnpremultiplied = false;
@@ -188,7 +182,7 @@ static jobject nativeDecodeRegion(JNIEnv* env, jobject, jlong brdHandle,
         env->SetObjectField(options, gOptions_mimeFieldID, 0);
 
         jobject jconfig = env->GetObjectField(options, gOptions_configFieldID);
-        prefConfig = GraphicsJNI::getNativeBitmapConfig(env, jconfig);
+        prefColorType = GraphicsJNI::getNativeBitmapColorType(env, jconfig);
         doDither = env->GetBooleanField(options, gOptions_ditherFieldID);
         preferQualityOverSpeed = env->GetBooleanField(options,
                 gOptions_preferQualityOverSpeedFieldID);
@@ -226,7 +220,7 @@ static jobject nativeDecodeRegion(JNIEnv* env, jobject, jlong brdHandle,
         adb.reset(bitmap);
     }
 
-    if (!brd->decodeRegion(bitmap, region, prefConfig, sampleSize)) {
+    if (!brd->decodeRegion(bitmap, region, prefColorType, sampleSize)) {
         return nullObjectReturn("decoder->decodeRegion returned false");
     }
 
@@ -242,6 +236,7 @@ static jobject nativeDecodeRegion(JNIEnv* env, jobject, jlong brdHandle,
     }
 
     if (tileBitmap != NULL) {
+        bitmap->notifyPixelsChanged();
         return tileBitmap;
     }
 
@@ -272,8 +267,6 @@ static void nativeClean(JNIEnv* env, jobject, jlong brdHandle) {
 }
 
 ///////////////////////////////////////////////////////////////////////////////
-
-#include <android_runtime/AndroidRuntime.h>
 
 static JNINativeMethod gBitmapRegionDecoderMethods[] = {
     {   "nativeDecodeRegion",
@@ -307,10 +300,8 @@ static JNINativeMethod gBitmapRegionDecoderMethods[] = {
     },
 };
 
-#define kClassPathName  "android/graphics/BitmapRegionDecoder"
-
 int register_android_graphics_BitmapRegionDecoder(JNIEnv* env)
 {
-    return android::AndroidRuntime::registerNativeMethods(env, kClassPathName,
-            gBitmapRegionDecoderMethods, SK_ARRAY_COUNT(gBitmapRegionDecoderMethods));
+    return android::RegisterMethodsOrDie(env, "android/graphics/BitmapRegionDecoder",
+            gBitmapRegionDecoderMethods, NELEM(gBitmapRegionDecoderMethods));
 }

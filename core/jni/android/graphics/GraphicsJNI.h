@@ -1,5 +1,5 @@
-#ifndef GraphicsJNI_DEFINED
-#define GraphicsJNI_DEFINED
+#ifndef _ANDROID_GRAPHICS_GRAPHICS_JNI_H_
+#define _ANDROID_GRAPHICS_GRAPHICS_JNI_H_
 
 #include "SkBitmap.h"
 #include "SkDevice.h"
@@ -12,8 +12,11 @@
 
 class SkBitmapRegionDecoder;
 class SkCanvas;
-class SkPaint;
-class SkPicture;
+
+namespace android {
+class Paint;
+struct TypefaceImpl;
+}
 
 class GraphicsJNI {
 public:
@@ -45,25 +48,39 @@ public:
     static void point_to_jpointf(const SkPoint& point, JNIEnv*, jobject jpointf);
 
     static SkCanvas* getNativeCanvas(JNIEnv*, jobject canvas);
-    static SkPaint*  getNativePaint(JNIEnv*, jobject paint);
+    static android::Paint*  getNativePaint(JNIEnv*, jobject paint);
+    static android::TypefaceImpl* getNativeTypeface(JNIEnv*, jobject paint);
     static SkBitmap* getNativeBitmap(JNIEnv*, jobject bitmap);
-    static SkPicture* getNativePicture(JNIEnv*, jobject picture);
     static SkRegion* getNativeRegion(JNIEnv*, jobject region);
 
-    /** Return the corresponding native config from the java Config enum,
-        or kNo_Config if the java object is null.
+    // Given the 'native' long held by the Rasterizer.java object, return a
+    // ref to its SkRasterizer* (or NULL).
+    static SkRasterizer* refNativeRasterizer(jlong rasterizerHandle);
+
+    /*
+     *  LegacyBitmapConfig is the old enum in Skia that matched the enum int values
+     *  in Bitmap.Config. Skia no longer supports this config, but has replaced it
+     *  with SkColorType. These routines convert between the two.
+     */
+    static SkColorType legacyBitmapConfigToColorType(jint legacyConfig);
+    static jint colorTypeToLegacyBitmapConfig(SkColorType colorType);
+
+    /** Return the corresponding native colorType from the java Config enum,
+        or kUnknown_SkColorType if the java object is null.
     */
-    static SkBitmap::Config getNativeBitmapConfig(JNIEnv*, jobject jconfig);
+    static SkColorType getNativeBitmapColorType(JNIEnv*, jobject jconfig);
 
     /** Create a java Bitmap object given the native bitmap (required) and optional
         storage array (may be null).
         bitmap's SkAlphaType must already be in sync with bitmapCreateFlags.
     */
     static jobject createBitmap(JNIEnv* env, SkBitmap* bitmap, jbyteArray buffer,
-            int bitmapCreateFlags, jbyteArray ninepatch, jintArray layoutbounds, int density = -1);
+            int bitmapCreateFlags, jbyteArray ninePatch, jobject ninePatchInsets, int density = -1);
 
     static jobject createBitmap(JNIEnv* env, SkBitmap* bitmap, int bitmapCreateFlags,
-            jbyteArray ninepatch, int density = -1);
+            jbyteArray ninePatch, int density = -1) {
+        return createBitmap(env, bitmap, NULL, bitmapCreateFlags, ninePatch, NULL, density);
+    }
 
     /** Reinitialize a bitmap. bitmap must already have its SkAlphaType set in
         sync with isPremultiplied
@@ -82,10 +99,11 @@ public:
 
     /** Copy the colors in colors[] to the bitmap, convert to the correct
         format along the way.
+        Whether to use premultiplied pixels is determined by dstBitmap's alphaType.
     */
     static bool SetPixels(JNIEnv* env, jintArray colors, int srcOffset,
             int srcStride, int x, int y, int width, int height,
-            const SkBitmap& dstBitmap, bool isPremultiplied);
+            const SkBitmap& dstBitmap);
 
     static jbyteArray getBitmapStorageObj(SkPixelRef *pixref);
 };
@@ -105,52 +123,11 @@ public:
 
     virtual ~AndroidPixelRef();
 
-    jbyteArray getStorageObj();
-
-    void setLocalJNIRef(jbyteArray arr);
-
-    /** Used to hold a ref to the pixels when the Java bitmap may be collected.
-     *  If specified, 'localref' is a valid JNI local reference to the byte array
-     *  containing the pixel data.
-     *
-     *  'localref' may only be NULL if setLocalJNIRef() was already called with
-     *  a JNI local ref that is still valid.
-     */
-    virtual void globalRef(void* localref=NULL);
-
-    /** Release a ref that was acquired using globalRef(). */
-    virtual void globalUnref();
-
 private:
     AndroidPixelRef* const fWrappedPixelRef; // if set, delegate memory management calls to this
 
     JavaVM* fVM;
-    bool fOnJavaHeap; // If true, the memory was allocated on the Java heap
-
     jbyteArray fStorageObj; // The Java byte[] object used as the bitmap backing store
-    bool fHasGlobalRef; // If true, fStorageObj holds a JNI global ref
-
-    mutable int32_t fGlobalRefCnt;
-};
-
-/** A helper class for accessing Java-heap-allocated bitmaps.
- *  This should be used when calling into a JNI method that retains a
- *  reference to the bitmap longer than the lifetime of the Java Bitmap.
- *
- *  After creating an instance of this class, a call to
- *  AndroidPixelRef::globalRef() will allocate a JNI global reference
- *  to the backing buffer object.
- */
-class JavaHeapBitmapRef {
-public:
-
-    JavaHeapBitmapRef(JNIEnv *env, SkBitmap* nativeBitmap, jbyteArray buffer);
-    ~JavaHeapBitmapRef();
-
-private:
-    JNIEnv* fEnv;
-    SkBitmap* fNativeBitmap;
-    jbyteArray fBuffer;
 };
 
 /** Allocator which allocates the backing buffer in the Java heap.
@@ -183,7 +160,6 @@ public:
 
 private:
     JavaVM* fVM;
-    bool fAllocateInJavaHeap;
     jbyteArray fStorageObj;
     int fAllocCount;
 };
@@ -271,4 +247,4 @@ void doThrowIOE(JNIEnv* env, const char* msg = NULL);   // IO Exception
 #define NPE_CHECK_RETURN_VOID(env, object)    \
     do { if (NULL == (object)) { doThrowNPE(env); return; } } while (0)
 
-#endif
+#endif  // _ANDROID_GRAPHICS_GRAPHICS_JNI_H_

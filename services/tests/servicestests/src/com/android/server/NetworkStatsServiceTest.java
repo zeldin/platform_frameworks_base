@@ -879,7 +879,8 @@ public class NetworkStatsServiceTest extends AndroidTestCase {
         expectLastCall().anyTimes();
 
         mAlarmManager.set(eq(AlarmManager.ELAPSED_REALTIME), anyLong(), anyLong(), anyLong(),
-                isA(PendingIntent.class), isA(WorkSource.class));
+                isA(PendingIntent.class), isA(WorkSource.class),
+                isA(AlarmManager.AlarmClockInfo.class));
         expectLastCall().atLeastOnce();
 
         mNetManager.setGlobalAlert(anyLong());
@@ -931,7 +932,6 @@ public class NetworkStatsServiceTest extends AndroidTestCase {
         expect(mSettings.getPollInterval()).andReturn(HOUR_IN_MILLIS).anyTimes();
         expect(mSettings.getTimeCacheMaxAge()).andReturn(DAY_IN_MILLIS).anyTimes();
         expect(mSettings.getSampleEnabled()).andReturn(true).anyTimes();
-        expect(mSettings.getReportXtOverDev()).andReturn(true).anyTimes();
 
         final Config config = new Config(bucketDuration, deleteAge, deleteAge);
         expect(mSettings.getDevConfig()).andReturn(config).anyTimes();
@@ -1006,7 +1006,7 @@ public class NetworkStatsServiceTest extends AndroidTestCase {
         info.setDetailedState(DetailedState.CONNECTED, null, null);
         final LinkProperties prop = new LinkProperties();
         prop.setInterfaceName(TEST_IFACE);
-        return new NetworkState(info, prop, null, null, TEST_SSID);
+        return new NetworkState(info, prop, null, null, null, TEST_SSID);
     }
 
     private static NetworkState buildMobile3gState(String subscriberId) {
@@ -1015,7 +1015,7 @@ public class NetworkStatsServiceTest extends AndroidTestCase {
         info.setDetailedState(DetailedState.CONNECTED, null, null);
         final LinkProperties prop = new LinkProperties();
         prop.setInterfaceName(TEST_IFACE);
-        return new NetworkState(info, prop, null, subscriberId, null);
+        return new NetworkState(info, prop, null, null, subscriberId, null);
     }
 
     private static NetworkState buildMobile4gState(String iface) {
@@ -1023,7 +1023,7 @@ public class NetworkStatsServiceTest extends AndroidTestCase {
         info.setDetailedState(DetailedState.CONNECTED, null, null);
         final LinkProperties prop = new LinkProperties();
         prop.setInterfaceName(iface);
-        return new NetworkState(info, prop, null);
+        return new NetworkState(info, prop, null, null, null, null);
     }
 
     private NetworkStats buildEmptyStats() {

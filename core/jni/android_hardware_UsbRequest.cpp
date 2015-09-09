@@ -20,7 +20,7 @@
 
 #include "jni.h"
 #include "JNIHelp.h"
-#include "android_runtime/AndroidRuntime.h"
+#include "core_jni_helpers.h"
 
 #include <usbhost/usbhost.h>
 
@@ -100,18 +100,19 @@ android_hardware_UsbRequest_queue_array(JNIEnv *env, jobject thiz,
     }
     request->buffer_length = length;
 
+    // save a reference to ourselves so UsbDeviceConnection.waitRequest() can find us
+    request->client_data = (void *)env->NewGlobalRef(thiz);
+
     if (usb_request_queue(request)) {
         if (request->buffer) {
             // free our buffer if usb_request_queue fails
             free(request->buffer);
             request->buffer = NULL;
         }
+        env->DeleteGlobalRef((jobject)request->client_data);
         return false;
-    } else {
-        // save a reference to ourselves so UsbDeviceConnection.waitRequest() can find us
-        request->client_data = (void *)env->NewGlobalRef(thiz);
-        return true;
     }
+    return true;
 }
 
 static jint
@@ -152,16 +153,17 @@ android_hardware_UsbRequest_queue_direct(JNIEnv *env, jobject thiz,
     }
     request->buffer_length = length;
 
+    // save a reference to ourselves so UsbDeviceConnection.waitRequest() can find us
+    // we also need this to make sure our native buffer is not deallocated
+    // while IO is active
+    request->client_data = (void *)env->NewGlobalRef(thiz);
+
     if (usb_request_queue(request)) {
         request->buffer = NULL;
+        env->DeleteGlobalRef((jobject)request->client_data);
         return false;
-    } else {
-        // save a reference to ourselves so UsbDeviceConnection.waitRequest() can find us
-        // we also need this to make sure our native buffer is not deallocated
-        // while IO is active
-        request->client_data = (void *)env->NewGlobalRef(thiz);
-        return true;
     }
+    return true;
 }
 
 static jint
@@ -213,7 +215,7 @@ int register_android_hardware_UsbRequest(JNIEnv *env)
         return -1;
     }
 
-    return AndroidRuntime::registerNativeMethods(env, "android/hardware/usb/UsbRequest",
+    return RegisterMethodsOrDie(env, "android/hardware/usb/UsbRequest",
             method_table, NELEM(method_table));
 }
 

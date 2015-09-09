@@ -61,6 +61,12 @@ public class Process {
     public static final String SECONDARY_ZYGOTE_SOCKET = "zygote_secondary";
 
     /**
+     * Defines the root UID.
+     * @hide
+     */
+    public static final int ROOT_UID = 0;
+
+    /**
      * Defines the UID/GID under which system code runs.
      */
     public static final int SYSTEM_UID = 1000;
@@ -129,6 +135,12 @@ public class Process {
      * @hide
      */
     public static final int PACKAGE_INFO_GID = 1032;
+
+    /**
+     * Defines the UID/GID for the shared RELRO file updater process.
+     * @hide
+     */
+    public static final int SHARED_RELRO_UID = 1037;
 
     /**
      * Defines the start of a range of UIDs (and GIDs), going from this
@@ -602,9 +614,9 @@ public class Process {
         synchronized(Process.class) {
             ArrayList<String> argsForZygote = new ArrayList<String>();
 
-            // --runtime-init, --setuid=, --setgid=,
+            // --runtime-args, --setuid=, --setgid=,
             // and --setgroups= must go first
-            argsForZygote.add("--runtime-init");
+            argsForZygote.add("--runtime-args");
             argsForZygote.add("--setuid=" + uid);
             argsForZygote.add("--setgid=" + gid);
             if ((debugFlags & Zygote.DEBUG_ENABLE_JNI_LOGGING) != 0) {
@@ -618,6 +630,12 @@ public class Process {
             }
             if ((debugFlags & Zygote.DEBUG_ENABLE_CHECKJNI) != 0) {
                 argsForZygote.add("--enable-checkjni");
+            }
+            if ((debugFlags & Zygote.DEBUG_ENABLE_JIT) != 0) {
+                argsForZygote.add("--enable-jit");
+            }
+            if ((debugFlags & Zygote.DEBUG_GENERATE_DEBUG_INFO) != 0) {
+                argsForZygote.add("--generate-debug-info");
             }
             if ((debugFlags & Zygote.DEBUG_ENABLE_ASSERT) != 0) {
                 argsForZygote.add("--enable-assert");
@@ -673,6 +691,20 @@ public class Process {
             }
 
             return zygoteSendArgsAndGetResult(openZygoteSocketIfNeeded(abi), argsForZygote);
+        }
+    }
+
+    /**
+     * Tries to establish a connection to the zygote that handles a given {@code abi}. Might block and retry if the
+     * zygote is unresponsive. This method is a no-op if a connection is already open.
+     *
+     * @hide
+     */
+    public static void establishZygoteConnectionForAbi(String abi) {
+        try {
+            openZygoteSocketIfNeeded(abi);
+        } catch (ZygoteStartFailedEx ex) {
+            throw new RuntimeException("Unable to connect to zygote for abi: " + abi, ex);
         }
     }
 
@@ -961,19 +993,6 @@ public class Process {
     }
 
     /**
-     * Set the out-of-memory badness adjustment for a process.
-     * 
-     * @param pid The process identifier to set.
-     * @param amt Adjustment value -- linux allows -16 to +15.
-     * 
-     * @return Returns true if the underlying system supports this
-     *         feature, else false.
-     *         
-     * {@hide}
-     */
-    public static final native boolean setOomAdj(int pid, int amt);
-
-    /**
      * Adjust the swappiness level for a process.
      *
      * @param pid The process identifier to set.
@@ -1114,4 +1133,18 @@ public class Process {
          */
         public boolean usingWrapper;
     }
+
+    /**
+     * Kill all processes in a process group started for the given
+     * pid.
+     * @hide
+     */
+    public static final native int killProcessGroup(int uid, int pid);
+
+    /**
+     * Remove all process groups.  Expected to be called when ActivityManager
+     * is restarted.
+     * @hide
+     */
+    public static final native void removeAllProcessGroups();
 }

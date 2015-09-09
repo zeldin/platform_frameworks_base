@@ -16,6 +16,7 @@
 
 package android.webkit;
 
+import android.annotation.SystemApi;
 import android.content.res.Configuration;
 import android.graphics.Bitmap;
 import android.graphics.Canvas;
@@ -23,6 +24,7 @@ import android.graphics.Paint;
 import android.graphics.Picture;
 import android.graphics.Rect;
 import android.graphics.drawable.Drawable;
+import android.net.Uri;
 import android.net.http.SslCertificate;
 import android.os.Bundle;
 import android.os.Message;
@@ -52,6 +54,7 @@ import java.util.Map;
  *
  * @hide Not part of the public API; only required by system implementors.
  */
+@SystemApi
 public interface WebViewProvider {
     //-------------------------------------------------------------------------
     // Main interface for backend provider of the WebView class.
@@ -147,7 +150,7 @@ public interface WebViewProvider {
 
     public Picture capturePicture();
 
-    public PrintDocumentAdapter createPrintDocumentAdapter();
+    public PrintDocumentAdapter createPrintDocumentAdapter(String documentName);
 
     public float getScale();
 
@@ -236,6 +239,8 @@ public interface WebViewProvider {
     public boolean canZoomIn();
 
     public boolean canZoomOut();
+
+    public boolean zoomBy(float zoomFactor);
 
     public boolean zoomIn();
 
@@ -357,6 +362,10 @@ public interface WebViewProvider {
         public void setLayerType(int layerType, Paint paint);
 
         public void preDispatchDraw(Canvas canvas);
+
+        public void onStartTemporaryDetach();
+
+        public void onFinishTemporaryDetach();
     }
 
     interface ScrollDelegate {

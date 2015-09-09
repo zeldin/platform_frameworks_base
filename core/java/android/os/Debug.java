@@ -26,7 +26,6 @@ import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
 import java.io.FileReader;
 import java.io.IOException;
-import java.io.OutputStreamWriter;
 import java.io.PrintWriter;
 import java.io.Reader;
 import java.lang.reflect.Field;
@@ -35,13 +34,13 @@ import java.lang.annotation.Target;
 import java.lang.annotation.ElementType;
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
+import java.util.Map;
 
 import org.apache.harmony.dalvik.ddmc.Chunk;
 import org.apache.harmony.dalvik.ddmc.ChunkHandler;
 import org.apache.harmony.dalvik.ddmc.DdmServer;
 
 import dalvik.bytecode.OpcodeInfo;
-import dalvik.bytecode.Opcodes;
 import dalvik.system.VMDebug;
 
 
@@ -106,7 +105,7 @@ public final class Debug
 
     /**
      * This class is used to retrieved various statistics about the memory mappings for this
-     * process. The returns info broken down by dalvik, native, and other. All results are in kB.
+     * process. The returned info is broken down by dalvik, native, and other. All results are in kB.
      */
     public static class MemoryInfo implements Parcelable {
         /** The proportional set size for dalvik heap.  (Doesn't include other Dalvik overhead.) */
@@ -167,10 +166,10 @@ public final class Debug
         public int otherSwappedOut;
 
         /** @hide */
-        public static final int NUM_OTHER_STATS = 16;
+        public static final int NUM_OTHER_STATS = 17;
 
         /** @hide */
-        public static final int NUM_DVK_STATS = 5;
+        public static final int NUM_DVK_STATS = 8;
 
         /** @hide */
         public static final int NUM_CATEGORIES = 7;
@@ -298,23 +297,27 @@ public final class Debug
                 case 1: return "Stack";
                 case 2: return "Cursor";
                 case 3: return "Ashmem";
-                case 4: return "Other dev";
-                case 5: return ".so mmap";
-                case 6: return ".jar mmap";
-                case 7: return ".apk mmap";
-                case 8: return ".ttf mmap";
-                case 9: return ".dex mmap";
-                case 10: return "code mmap";
-                case 11: return "image mmap";
-                case 12: return "Other mmap";
-                case 13: return "Graphics";
-                case 14: return "GL";
-                case 15: return "Memtrack";
-                case 16: return ".Heap";
-                case 17: return ".LOS";
-                case 18: return ".LinearAlloc";
-                case 19: return ".GC";
-                case 20: return ".JITCache";
+                case 4: return "Gfx dev";
+                case 5: return "Other dev";
+                case 6: return ".so mmap";
+                case 7: return ".jar mmap";
+                case 8: return ".apk mmap";
+                case 9: return ".ttf mmap";
+                case 10: return ".dex mmap";
+                case 11: return ".oat mmap";
+                case 12: return ".art mmap";
+                case 13: return "Other mmap";
+                case 14: return "EGL mtrack";
+                case 15: return "GL mtrack";
+                case 16: return "Other mtrack";
+                case 17: return ".Heap";
+                case 18: return ".LOS";
+                case 19: return ".LinearAlloc";
+                case 20: return ".GC";
+                case 21: return ".JITCache";
+                case 22: return ".Zygote";
+                case 23: return ".NonMoving";
+                case 24: return ".IndirectRef";
                 default: return "????";
             }
         }
@@ -1033,6 +1036,112 @@ href="{@docRoot}guide/developing/tools/traceview.html">Traceview: A Graphical Lo
     }
 
     /**
+     * Returns the value of a particular runtime statistic or {@code null} if no
+     * such runtime statistic exists.
+     *
+     * <p>The following table lists the runtime statistics that the runtime supports.
+     * Note runtime statistics may be added or removed in a future API level.</p>
+     *
+     * <table>
+     *     <thead>
+     *         <tr>
+     *             <th>Runtime statistic name</th>
+     *             <th>Meaning</th>
+     *             <th>Example</th>
+     *             <th>Supported (API Levels)</th>
+     *         </tr>
+     *     </thead>
+     *     <tbody>
+     *         <tr>
+     *             <td>art.gc.gc-count</td>
+     *             <td>The number of garbage collection runs.</td>
+     *             <td>{@code 164}</td>
+     *             <td>23</td>
+     *         </tr>
+     *         <tr>
+     *             <td>art.gc.gc-time</td>
+     *             <td>The total duration of garbage collection runs in ms.</td>
+     *             <td>{@code 62364}</td>
+     *             <td>23</td>
+     *         </tr>
+     *         <tr>
+     *             <td>art.gc.bytes-allocated</td>
+     *             <td>The total number of bytes that the application allocated.</td>
+     *             <td>{@code 1463948408}</td>
+     *             <td>23</td>
+     *         </tr>
+     *         <tr>
+     *             <td>art.gc.bytes-freed</td>
+     *             <td>The total number of bytes that garbage collection reclaimed.</td>
+     *             <td>{@code 1313493084}</td>
+     *             <td>23</td>
+     *         </tr>
+     *         <tr>
+     *             <td>art.gc.blocking-gc-count</td>
+     *             <td>The number of blocking garbage collection runs.</td>
+     *             <td>{@code 2}</td>
+     *             <td>23</td>
+     *         </tr>
+     *         <tr>
+     *             <td>art.gc.blocking-gc-time</td>
+     *             <td>The total duration of blocking garbage collection runs in ms.</td>
+     *             <td>{@code 804}</td>
+     *             <td>23</td>
+     *         </tr>
+     *         <tr>
+     *             <td>art.gc.gc-count-rate-histogram</td>
+     *             <td>Every 10 seconds, the gc-count-rate is computed as the number of garbage
+     *                 collection runs that have occurred over the last 10
+     *                 seconds. art.gc.gc-count-rate-histogram is a histogram of the gc-count-rate
+     *                 samples taken since the process began. The histogram can be used to identify
+     *                 instances of high rates of garbage collection runs. For example, a histogram
+     *                 of "0:34503,1:45350,2:11281,3:8088,4:43,5:8" shows that most of the time
+     *                 there are between 0 and 2 garbage collection runs every 10 seconds, but there
+     *                 were 8 distinct 10-second intervals in which 5 garbage collection runs
+     *                 occurred.</td>
+     *             <td>{@code 0:34503,1:45350,2:11281,3:8088,4:43,5:8}</td>
+     *             <td>23</td>
+     *         </tr>
+     *         <tr>
+     *             <td>art.gc.blocking-gc-count-rate-histogram</td>
+     *             <td>Every 10 seconds, the blocking-gc-count-rate is computed as the number of
+     *                 blocking garbage collection runs that have occurred over the last 10
+     *                 seconds. art.gc.blocking-gc-count-rate-histogram is a histogram of the
+     *                 blocking-gc-count-rate samples taken since the process began. The histogram
+     *                 can be used to identify instances of high rates of blocking garbage
+     *                 collection runs. For example, a histogram of "0:99269,1:1,2:1" shows that
+     *                 most of the time there are zero blocking garbage collection runs every 10
+     *                 seconds, but there was one 10-second interval in which one blocking garbage
+     *                 collection run occurred, and there was one interval in which two blocking
+     *                 garbage collection runs occurred.</td>
+     *             <td>{@code 0:99269,1:1,2:1}</td>
+     *             <td>23</td>
+     *         </tr>
+     *     </tbody>
+     * </table>
+     *
+     * @param statName
+     *            the name of the runtime statistic to look up.
+     * @return the value of the specified runtime statistic or {@code null} if the
+     *         runtime statistic doesn't exist.
+     * @hide
+     */
+    public static String getRuntimeStat(String statName) {
+        return VMDebug.getRuntimeStat(statName);
+    }
+
+    /**
+     * Returns a map of the names/values of the runtime statistics
+     * that {@link #getRuntimeStat(String)} supports.
+     *
+     * @return a map of the names/values of the supported runtime statistics.
+     * @hide
+     */
+    public static Map<String, String> getRuntimeStats() {
+        return VMDebug.getRuntimeStats();
+    }
+
+    /**
      * Returns the size of the native heap.
      * @return The size of the native heap in bytes.
      */
@@ -1072,9 +1181,10 @@ href="{@docRoot}guide/developing/tools/traceview.html">Traceview: A Graphical Lo
     /**
      * Retrieves the PSS memory used by the process as given by the
      * smaps.  Optionally supply a long array of 1 entry to also
-     * receive the uss of the process.  @hide
+     * receive the uss of the process, and another array to also
+     * retrieve the separate memtrack size.  @hide
      */
-    public static native long getPss(int pid, long[] outUss);
+    public static native long getPss(int pid, long[] outUss, long[] outMemtrack);
 
     /** @hide */
     public static final int MEMINFO_TOTAL = 0;
@@ -1095,7 +1205,15 @@ href="{@docRoot}guide/developing/tools/traceview.html">Traceview: A Graphical Lo
     /** @hide */
     public static final int MEMINFO_ZRAM_TOTAL = 8;
     /** @hide */
-    public static final int MEMINFO_COUNT = 9;
+    public static final int MEMINFO_MAPPED = 9;
+    /** @hide */
+    public static final int MEMINFO_VM_ALLOC_USED = 10;
+    /** @hide */
+    public static final int MEMINFO_PAGE_TABLES = 11;
+    /** @hide */
+    public static final int MEMINFO_KERNEL_STACK = 12;
+    /** @hide */
+    public static final int MEMINFO_COUNT = 13;
 
     /**
      * Retrieves /proc/meminfo.  outSizes is filled with fields

@@ -29,13 +29,15 @@
 
 namespace android {
 
-struct MetaData;
+struct IMediaHTTPService;
+class MetaData;
 struct NuMediaExtractor;
 
 struct JMediaExtractor : public RefBase {
     JMediaExtractor(JNIEnv *env, jobject thiz);
 
     status_t setDataSource(
+            const sp<IMediaHTTPService> &httpService,
             const char *path,
             const KeyedVector<String8, String8> *headers);
 

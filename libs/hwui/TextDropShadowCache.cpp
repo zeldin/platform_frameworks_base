@@ -40,7 +40,8 @@ hash_t ShadowText::hash() const {
     hash = JenkinsHashMix(hash, android::hash_type(italicStyle));
     hash = JenkinsHashMix(hash, android::hash_type(scaleX));
     if (text) {
-        hash = JenkinsHashMixShorts(hash, text, charCount);
+        hash = JenkinsHashMixShorts(
+            hash, reinterpret_cast<const uint16_t*>(text), charCount);
     }
     if (positions) {
         for (uint32_t i = 0; i < charCount * 2; i++) {
@@ -147,7 +148,7 @@ void TextDropShadowCache::setMaxSize(uint32_t maxSize) {
 // Callbacks
 ///////////////////////////////////////////////////////////////////////////////
 
-void TextDropShadowCache::operator()(ShadowText& text, ShadowTexture*& texture) {
+void TextDropShadowCache::operator()(ShadowText&, ShadowTexture*& texture) {
     if (texture) {
         mSize -= texture->bitmapSize;
 
@@ -168,7 +169,7 @@ void TextDropShadowCache::clear() {
     mCache.clear();
 }
 
-ShadowTexture* TextDropShadowCache::get(SkPaint* paint, const char* text, uint32_t len,
+ShadowTexture* TextDropShadowCache::get(const SkPaint* paint, const char* text, uint32_t len,
         int numGlyphs, float radius, const float* positions) {
     ShadowText entry(paint, radius, len, text, positions);
     ShadowTexture* texture = mCache.get(entry);

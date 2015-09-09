@@ -201,9 +201,9 @@ public abstract class PrintService extends Service {
      * should build another one using the {@link PrintJobInfo.Builder} class. You
      * can specify any standard properties and add advanced, printer specific,
      * ones via {@link PrintJobInfo.Builder#putAdvancedOption(String, String)
-     * PrintJobInfo.Builder#putAdvancedOption(String, String)} and {@link
+     * PrintJobInfo.Builder.putAdvancedOption(String, String)} and {@link
      * PrintJobInfo.Builder#putAdvancedOption(String, int)
-     * PrintJobInfo.Builder#putAdvancedOption(String, int)}. The advanced options
+     * PrintJobInfo.Builder.putAdvancedOption(String, int)}. The advanced options
      * are not interpreted by the system, they will not be visible to applications,
      * and can only be accessed by your print service via {@link
      * PrintJob#getAdvancedStringOption(String) PrintJob.getAdvancedStringOption(String)}
@@ -212,13 +212,25 @@ public abstract class PrintService extends Service {
      * <p>
      * If the advanced print options activity offers changes to the standard print
      * options, you can get the current {@link android.print.PrinterInfo} using the
-     * "android.intent.extra.print.EXTRA_PRINTER_INFO" extra which will allow you to
-     * present the user with UI options supported by the current printer. For example,
-     * if the current printer does not support a give media size, you should not
-     * offer it in the advanced print options dialog.
+     * {@link #EXTRA_PRINTER_INFO} extra which will allow you to present the user
+     * with UI options supported by the current printer. For example, if the current
+     * printer does not support a given media size, you should not offer it in the
+     * advanced print options UI.
      * </p>
+     *
+     * @see #EXTRA_PRINTER_INFO
      */
     public static final String EXTRA_PRINT_JOB_INFO = "android.intent.extra.print.PRINT_JOB_INFO";
+
+    /**
+     * If you declared an optional activity with advanced print options via the
+     * {@link R.attr#advancedPrintOptionsActivity advancedPrintOptionsActivity}
+     * attribute, this extra is used to pass in the currently selected printer's
+     * {@link android.print.PrinterInfo} to your activity allowing you to inspect it.
+     *
+     * @see #EXTRA_PRINT_JOB_INFO
+     */
+    public static final String EXTRA_PRINTER_INFO = "android.intent.extra.print.EXTRA_PRINTER_INFO";
 
     private Handler mHandler;
 
@@ -374,7 +386,7 @@ public abstract class PrintService extends Service {
 
             @Override
             public void setClient(IPrintServiceClient client) {
-                mHandler.obtainMessage(ServiceHandler.MSG_SET_CLEINT, client)
+                mHandler.obtainMessage(ServiceHandler.MSG_SET_CLIENT, client)
                         .sendToTarget();
             }
 
@@ -402,7 +414,7 @@ public abstract class PrintService extends Service {
         public static final int MSG_STOP_PRINTER_STATE_TRACKING = 7;
         public static final int MSG_ON_PRINTJOB_QUEUED = 8;
         public static final int MSG_ON_REQUEST_CANCEL_PRINTJOB = 9;
-        public static final int MSG_SET_CLEINT = 10;
+        public static final int MSG_SET_CLIENT = 10;
 
         public ServiceHandler(Looper looper) {
             super(looper, null, true);
@@ -516,9 +528,9 @@ public abstract class PrintService extends Service {
                     onPrintJobQueued(new PrintJob(printJobInfo, mClient));
                 } break;
 
-                case MSG_SET_CLEINT: {
+                case MSG_SET_CLIENT: {
                     if (DEBUG) {
-                        Log.i(LOG_TAG, "MSG_SET_CLEINT "
+                        Log.i(LOG_TAG, "MSG_SET_CLIENT "
                                 + getPackageName());
                     }
                     mClient = (IPrintServiceClient) message.obj;

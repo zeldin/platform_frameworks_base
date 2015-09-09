@@ -90,7 +90,7 @@ public final class BridgeContentProvider implements IContentProvider {
 
     @Override
     public ParcelFileDescriptor openFile(
-            String callingPackage, Uri arg0, String arg1, ICancellationSignal signal)
+            String callingPackage, Uri arg0, String arg1, ICancellationSignal signal, IBinder token)
             throws RemoteException, FileNotFoundException {
         // TODO Auto-generated method stub
         return null;
@@ -134,6 +134,7 @@ public final class BridgeContentProvider implements IContentProvider {
         // TODO Auto-generated method stub
         return null;
     }
+
 
     @Override
     public Uri canonicalize(String callingPkg, Uri uri) throws RemoteException {

@@ -27,7 +27,6 @@ import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStreamReader;
-import java.io.ObjectOutputStream;
 import java.io.OutputStreamWriter;
 import java.io.Reader;
 import java.io.Writer;
@@ -61,6 +60,9 @@ public class Credentials {
 
     /** Key prefix for user private keys. */
     public static final String USER_PRIVATE_KEY = "USRPKEY_";
+
+    /** Key prefix for user secret keys. */
+    public static final String USER_SECRET_KEY = "USRSKEY_";
 
     /** Key prefix for VPN. */
     public static final String VPN = "VPN_";
@@ -219,7 +221,8 @@ public class Credentials {
          * Make sure every type is deleted. There can be all three types, so
          * don't use a conditional here.
          */
-        return keystore.delKey(Credentials.USER_PRIVATE_KEY + alias)
+        return keystore.delete(Credentials.USER_PRIVATE_KEY + alias)
+                | keystore.delete(Credentials.USER_SECRET_KEY + alias)
                 | deleteCertificateTypesForAlias(keystore, alias);
     }
 
@@ -235,5 +238,21 @@ public class Credentials {
          */
         return keystore.delete(Credentials.USER_CERTIFICATE + alias)
                 | keystore.delete(Credentials.CA_CERTIFICATE + alias);
+    }
+
+    /**
+     * Delete private key for a particular {@code alias}.
+     * Returns {@code true} if an entry was was deleted.
+     */
+    static boolean deletePrivateKeyTypeForAlias(KeyStore keystore, String alias) {
+        return keystore.delete(Credentials.USER_PRIVATE_KEY + alias);
+    }
+
+    /**
+     * Delete secret key for a particular {@code alias}.
+     * Returns {@code true} if an entry was was deleted.
+     */
+    static boolean deleteSecretKeyTypeForAlias(KeyStore keystore, String alias) {
+        return keystore.delete(Credentials.USER_SECRET_KEY + alias);
     }
 }

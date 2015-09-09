@@ -16,11 +16,14 @@
 
 package com.android.systemui.statusbar.policy;
 
+import android.app.ActivityManager;
 import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
+import android.content.res.TypedArray;
 import android.os.Bundle;
+import android.os.UserHandle;
 import android.text.Spannable;
 import android.text.SpannableStringBuilder;
 import android.text.format.DateFormat;
@@ -30,6 +33,7 @@ import android.util.AttributeSet;
 import android.widget.TextView;
 
 import com.android.systemui.DemoMode;
+import com.android.systemui.R;
 
 import java.text.SimpleDateFormat;
 import java.util.Calendar;
@@ -52,7 +56,7 @@ public class Clock extends TextView implements DemoMode {
     private static final int AM_PM_STYLE_SMALL   = 1;
     private static final int AM_PM_STYLE_GONE    = 2;
 
-    private static final int AM_PM_STYLE = AM_PM_STYLE_GONE;
+    private final int mAmPmStyle;
 
     public Clock(Context context) {
         this(context, null);
@@ -64,6 +68,15 @@ public class Clock extends TextView implements DemoMode {
 
     public Clock(Context context, AttributeSet attrs, int defStyle) {
         super(context, attrs, defStyle);
+        TypedArray a = context.getTheme().obtainStyledAttributes(
+                attrs,
+                R.styleable.Clock,
+                0, 0);
+        try {
+            mAmPmStyle = a.getInt(R.styleable.Clock_amPmStyle, AM_PM_STYLE_GONE);
+        } finally {
+            a.recycle();
+        }
     }
 
     @Override
@@ -80,7 +93,8 @@ public class Clock extends TextView implements DemoMode {
             filter.addAction(Intent.ACTION_CONFIGURATION_CHANGED);
             filter.addAction(Intent.ACTION_USER_SWITCHED);
 
-            getContext().registerReceiver(mIntentReceiver, filter, null, getHandler());
+            getContext().registerReceiverAsUser(mIntentReceiver, UserHandle.ALL, filter,
+                    null, getHandler());
         }
 
         // NOTE: It's safe to do these after registering the receiver since the receiver always runs
@@ -131,21 +145,21 @@ public class Clock extends TextView implements DemoMode {
 
     private final CharSequence getSmallTime() {
         Context context = getContext();
-        boolean is24 = DateFormat.is24HourFormat(context);
+        boolean is24 = DateFormat.is24HourFormat(context, ActivityManager.getCurrentUser());
         LocaleData d = LocaleData.get(context.getResources().getConfiguration().locale);
 
         final char MAGIC1 = '\uEF00';
         final char MAGIC2 = '\uEF01';
 
         SimpleDateFormat sdf;
-        String format = is24 ? d.timeFormat24 : d.timeFormat12;
+        String format = is24 ? d.timeFormat_Hm : d.timeFormat_hm;
         if (!format.equals(mClockFormatString)) {
             /*
              * Search for an unquoted "a" in the format string, so we can
              * add dummy characters around it to let us find it again after
              * formatting and change its size.
              */
-            if (AM_PM_STYLE != AM_PM_STYLE_NORMAL) {
+            if (mAmPmStyle != AM_PM_STYLE_NORMAL) {
                 int a = -1;
                 boolean quoted = false;
                 for (int i = 0; i < format.length(); i++) {
@@ -177,15 +191,15 @@ public class Clock extends TextView implements DemoMode {
         }
         String result = sdf.format(mCalendar.getTime());
 
-        if (AM_PM_STYLE != AM_PM_STYLE_NORMAL) {
+        if (mAmPmStyle != AM_PM_STYLE_NORMAL) {
             int magic1 = result.indexOf(MAGIC1);
             int magic2 = result.indexOf(MAGIC2);
             if (magic1 >= 0 && magic2 > magic1) {
                 SpannableStringBuilder formatted = new SpannableStringBuilder(result);
-                if (AM_PM_STYLE == AM_PM_STYLE_GONE) {
+                if (mAmPmStyle == AM_PM_STYLE_GONE) {
                     formatted.delete(magic1, magic2+1);
                 } else {
-                    if (AM_PM_STYLE == AM_PM_STYLE_SMALL) {
+                    if (mAmPmStyle == AM_PM_STYLE_SMALL) {
                         CharacterStyle style = new RelativeSizeSpan(0.7f);
                         formatted.setSpan(style, magic1, magic2,
                                           Spannable.SPAN_EXCLUSIVE_INCLUSIVE);

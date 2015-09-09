@@ -16,9 +16,6 @@
 
 package android.renderscript;
 
-import java.lang.reflect.Field;
-import android.util.Log;
-
 /**
  * <p>An Element represents one item within an {@link
  * android.renderscript.Allocation}.  An Element is roughly equivalent to a C
@@ -117,11 +114,15 @@ public class Element extends BaseObj {
      * MATRIX the three matrix types contain FLOAT_32 elements and are treated
      * as 32 bits for alignment purposes.
      *
-     * RS_* objects.  32 bit opaque handles.
+     * RS_* objects:  opaque handles with implementation dependent
+     * sizes.
      */
     public enum DataType {
         NONE (0, 0),
-        //FLOAT_16 (1, 2),
+        /**
+         *     @hide
+         */
+        FLOAT_16 (1, 2),
         FLOAT_32 (2, 4),
         FLOAT_64 (3, 8),
         SIGNED_8 (4, 1),
@@ -389,6 +390,16 @@ public class Element extends BaseObj {
         return rs.mElement_I64;
     }
 
+    /**
+     *     @hide
+     */
+    public static Element F16(RenderScript rs) {
+        if(rs.mElement_F16 == null) {
+            rs.mElement_F16 = createUser(rs, DataType.FLOAT_16);
+        }
+        return rs.mElement_F16;
+    }
+
     public static Element F32(RenderScript rs) {
         if(rs.mElement_F32 == null) {
             rs.mElement_F32 = createUser(rs, DataType.FLOAT_32);
@@ -521,6 +532,36 @@ public class Element extends BaseObj {
             rs.mElement_RGBA_8888 = createPixel(rs, DataType.UNSIGNED_8, DataKind.PIXEL_RGBA);
         }
         return rs.mElement_RGBA_8888;
+    }
+
+    /**
+     *     @hide
+     */
+    public static Element F16_2(RenderScript rs) {
+        if(rs.mElement_HALF_2 == null) {
+            rs.mElement_HALF_2 = createVector(rs, DataType.FLOAT_16, 2);
+        }
+        return rs.mElement_HALF_2;
+    }
+
+    /**
+     *     @hide
+     */
+    public static Element F16_3(RenderScript rs) {
+        if(rs.mElement_HALF_3 == null) {
+            rs.mElement_HALF_3 = createVector(rs, DataType.FLOAT_16, 3);
+        }
+        return rs.mElement_HALF_3;
+    }
+
+    /**
+     *     @hide
+     */
+    public static Element F16_4(RenderScript rs) {
+        if(rs.mElement_HALF_4 == null) {
+            rs.mElement_HALF_4 = createVector(rs, DataType.FLOAT_16, 4);
+        }
+        return rs.mElement_HALF_4;
     }
 
     public static Element F32_2(RenderScript rs) {
@@ -885,6 +926,7 @@ public class Element extends BaseObj {
 
         switch (dt) {
         // Support only primitive integer/float/boolean types as vectors.
+        case FLOAT_16:
         case FLOAT_32:
         case FLOAT_64:
         case SIGNED_8:

@@ -55,6 +55,9 @@
           <li><a href="<?cs var:toroot ?>guide/components/tasks-and-back-stack.html">
               <span class="en">Tasks and Back Stack</span>
             </a></li>
+          <li><a href="<?cs var:toroot ?>guide/components/recents.html">
+              <span class="en">Overview Screen</span>
+            </a></li>
         </ul>
       </li>
       <li class="nav-section">
@@ -354,8 +357,61 @@
               <li><a href="<?cs var:toroot ?>guide/topics/renderscript/advanced.html">
                     <span class="en">Advanced RenderScript</span></a>
                   </li>
-              <li><a href="<?cs var:toroot ?>guide/topics/renderscript/reference.html">
-                    <span class="en">Runtime API Reference</span></a>
+              <li class="nav-section">
+                <div class="nav-section-header">
+                  <a href="<?cs var:toroot ?>guide/topics/renderscript/reference/overview.html">
+                    <span class="en">Runtime API Reference</span>
+                  </a></div>
+                <ul>
+                  <li><a href="<?cs var:toroot ?>guide/topics/renderscript/reference/rs_value_types.html">
+                    <span class="en">Numerical Types</span>
+                  </a></li>
+                  <li><a href="<?cs var:toroot ?>guide/topics/renderscript/reference/rs_object_types.html">
+                    <span class="en">Object Types</span>
+                  </a></li>
+                  <li><a href="<?cs var:toroot ?>guide/topics/renderscript/reference/rs_convert.html">
+                    <span class="en">Conversion Functions</span>
+                  </a></li>
+                  <li><a href="<?cs var:toroot ?>guide/topics/renderscript/reference/rs_math.html">
+                    <span class="en">Mathematical Constants and Functions</span>
+                  </a></li>
+                  <li><a href="<?cs var:toroot ?>guide/topics/renderscript/reference/rs_vector_math.html">
+                    <span class="en">Vector Math Functions</span>
+                  </a></li>
+                  <li><a href="<?cs var:toroot ?>guide/topics/renderscript/reference/rs_matrix.html">
+                    <span class="en">Matrix Functions</span>
+                  </a></li>
+                  <li><a href="<?cs var:toroot ?>guide/topics/renderscript/reference/rs_quaternion.html">
+                    <span class="en">Quaternion Functions</span>
+                  </a></li>
+                  <li><a href="<?cs var:toroot ?>guide/topics/renderscript/reference/rs_atomic.html">
+                    <span class="en">Atomic Update Functions</span>
+                  </a></li>
+                  <li><a href="<?cs var:toroot ?>guide/topics/renderscript/reference/rs_time.html">
+                    <span class="en">Time Functions and Types</span>
+                  </a></li>
+                  <li><a href="<?cs var:toroot ?>guide/topics/renderscript/reference/rs_allocation_data.html">
+                    <span class="en">Allocation Data Access Functions</span>
+                  </a></li>
+                  <li><a href="<?cs var:toroot ?>guide/topics/renderscript/reference/rs_object_info.html">
+                    <span class="en">Object Characteristics Functions</span>
+                  </a></li>
+                  <li><a href="<?cs var:toroot ?>guide/topics/renderscript/reference/rs_for_each.html">
+                    <span class="en">Kernel Invocation Functions and Types</span>
+                  </a></li>
+                  <li><a href="<?cs var:toroot ?>guide/topics/renderscript/reference/rs_io.html">
+                    <span class="en">Input/Output Functions</span>
+                  </a></li>
+                  <li><a href="<?cs var:toroot ?>guide/topics/renderscript/reference/rs_debug.html">
+                    <span class="en">Debugging Functions</span>
+                  </a></li>
+                  <li><a href="<?cs var:toroot ?>guide/topics/renderscript/reference/rs_graphics.html">
+                    <span class="en">Graphics Functions and Types</span>
+                  </a></li>
+                  <li><a href="<?cs var:toroot ?>guide/topics/renderscript/reference/index.html">
+                    <span class="en">Index</span>
+                  </a></li>
+                </ul>
               </li>
              </ul>
    </li>
@@ -368,7 +424,13 @@
                   <span class="en">Media Playback</span></a>
                 </li>
             <li><a href="<?cs var:toroot ?>guide/topics/media/mediarouter.html">
-                  <span class="en">MediaRouter</span></a>
+                  <span class="en">Media Router</span></a>
+                </li>
+            <li><a href="<?cs var:toroot ?>guide/topics/media/mediarouteprovider.html">
+                  <span class="en">Media Route Provider</span></a>
+                </li>
+            <li><a href="<?cs var:toroot ?>guide/topics/media/exoplayer.html">
+                  <span class="en">ExoPlayer</span></a>
                 </li>
             <li><a href="<?cs var:toroot ?>guide/appendix/media-formats.html">
                    <span class="en">Supported Media Formats</span></a>
@@ -561,7 +623,11 @@
       <li><a href="<?cs var:toroot ?>guide/practices/tablets-and-handsets.html">
             <span class="en">Supporting Tablets and Handsets</span>
           </a></li>
-
+      <li>
+        <a href="<?cs var:toroot ?>guide/practices/verifying-apps-art.html">
+          <span class="en">Verifying App Behavior on ART</span>
+        </a>
+      </li>
     </ul>
   </li>
 
@@ -575,4 +641,3 @@
     changeNavLang(getLangPref());
 //-->
 </script>
-

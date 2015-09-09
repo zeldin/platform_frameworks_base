@@ -1,10 +1,8 @@
 page.title=Sending the User to Another App
-parent.title=Interacting with Other Apps
-parent.link=index.html
+page.tags=intents
+helpoutsWidget=true
 
 trainingnavtop=true
-next.title=Getting a Result from an Activity
-next.link=result.html
 
 @jd:body
 
@@ -155,7 +153,8 @@ java.util.List} is not empty, you can safely use the intent. For example:</p>
 
 <pre>
 PackageManager packageManager = {@link android.content.Context#getPackageManager()};
-List&lt;ResolveInfo> activities = packageManager.queryIntentActivities(intent, 0);
+List<ResolveInfo> activities = packageManager.queryIntentActivities(intent,
+        PackageManager.MATCH_DEFAULT_ONLY);
 boolean isIntentSafe = activities.size() > 0;
 </pre>
 
@@ -166,7 +165,7 @@ the intent. If it is <code>false</code>, then there aren't any apps to handle th
 starts in case you need to disable the feature that uses the intent before the user attempts to use
 it. If you know of a specific app that can handle the intent, you can also provide a link for the
 user to download the app (see how to <a
-href="{@docRoot}distribute/googleplay/promote/linking.html">link to your product on Google
+href="{@docRoot}distribute/tools/promote/linking.html">link to your product on Google
 Play</a>).</p>
 
 

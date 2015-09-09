@@ -23,6 +23,9 @@
 #include "DisplayListRenderer.h"
 #include "Properties.h"
 #include "LayerRenderer.h"
+#include "ShadowTessellator.h"
+#include "RenderState.h"
+#include "utils/GLUtils.h"
 
 namespace android {
 
@@ -48,13 +51,14 @@ namespace uirenderer {
 ///////////////////////////////////////////////////////////////////////////////
 
 Caches::Caches(): Singleton<Caches>(),
-        mExtensions(Extensions::getInstance()), mInitialized(false) {
+        mExtensions(Extensions::getInstance()), mInitialized(false), mRenderState(NULL) {
     init();
     initFont();
     initConstraints();
     initProperties();
     initStaticProperties();
     initExtensions();
+    initTempProperties();
 
     mDebugLevel = readDebugLevel();
     ALOGD("Enabling debug mode %d", mDebugLevel);
@@ -62,6 +66,8 @@ Caches::Caches(): Singleton<Caches>(),
 
 bool Caches::init() {
     if (mInitialized) return false;
+
+    ATRACE_NAME("Caches::init");
 
     glGenBuffers(1, &meshBuffer);
     glBindBuffer(GL_ARRAY_BUFFER, meshBuffer);
@@ -85,7 +91,7 @@ bool Caches::init() {
 
     mRegionMesh = NULL;
     mMeshIndices = 0;
-
+    mShadowStripsIndices = 0;
     blend = false;
     lastSrcMode = GL_ZERO;
     lastDstMode = GL_ZERO;
@@ -196,6 +202,7 @@ bool Caches::initProperties() {
         drawDeferDisabled = !strcasecmp(property, "true");
         INIT_LOGD("  Draw defer %s", drawDeferDisabled ? "disabled" : "enabled");
     } else {
+        drawDeferDisabled = false;
         INIT_LOGD("  Draw defer enabled");
     }
 
@@ -203,6 +210,7 @@ bool Caches::initProperties() {
         drawReorderDisabled = !strcasecmp(property, "true");
         INIT_LOGD("  Draw reorder %s", drawReorderDisabled ? "disabled" : "enabled");
     } else {
+        drawReorderDisabled = false;
         INIT_LOGD("  Draw reorder enabled");
     }
 
@@ -222,12 +230,13 @@ void Caches::terminate() {
     mMeshIndices = 0;
     mRegionMesh = NULL;
 
+    glDeleteBuffers(1, &mShadowStripsIndices);
+    mShadowStripsIndices = 0;
+
     fboCache.clear();
 
     programCache.clear();
     currentProgram = NULL;
-
-    assetAtlas.terminate();
 
     patchCache.clear();
 
@@ -257,17 +266,35 @@ void Caches::dumpMemoryUsage() {
 }
 
 void Caches::dumpMemoryUsage(String8 &log) {
+    uint32_t total = 0;
     log.appendFormat("Current memory usage / total memory usage (bytes):\n");
     log.appendFormat("  TextureCache         %8d / %8d\n",
             textureCache.getSize(), textureCache.getMaxSize());
-    log.appendFormat("  LayerCache           %8d / %8d\n",
-            layerCache.getSize(), layerCache.getMaxSize());
+    log.appendFormat("  LayerCache           %8d / %8d (numLayers = %zu)\n",
+            layerCache.getSize(), layerCache.getMaxSize(), layerCache.getCount());
+    if (mRenderState) {
+        int memused = 0;
+        for (std::set<Layer*>::iterator it = mRenderState->mActiveLayers.begin();
+                it != mRenderState->mActiveLayers.end(); it++) {
+            const Layer* layer = *it;
+            log.appendFormat("    Layer size %dx%d; isTextureLayer()=%d; texid=%u fbo=%u; refs=%d\n",
+                    layer->getWidth(), layer->getHeight(),
+                    layer->isTextureLayer(), layer->getTexture(),
+                    layer->getFbo(), layer->getStrongCount());
+            memused += layer->getWidth() * layer->getHeight() * 4;
+        }
+        log.appendFormat("  Layers total   %8d (numLayers = %zu)\n",
+                memused, mRenderState->mActiveLayers.size());
+        total += memused;
+    }
     log.appendFormat("  RenderBufferCache    %8d / %8d\n",
             renderBufferCache.getSize(), renderBufferCache.getMaxSize());
     log.appendFormat("  GradientCache        %8d / %8d\n",
             gradientCache.getSize(), gradientCache.getMaxSize());
     log.appendFormat("  PathCache            %8d / %8d\n",
             pathCache.getSize(), pathCache.getMaxSize());
+    log.appendFormat("  TessellationCache    %8d / %8d\n",
+            tessellationCache.getSize(), tessellationCache.getMaxSize());
     log.appendFormat("  TextDropShadowCache  %8d / %8d\n", dropShadowCache.getSize(),
             dropShadowCache.getMaxSize());
     log.appendFormat("  PatchCache           %8d / %8d\n",
@@ -284,12 +311,11 @@ void Caches::dumpMemoryUsage(String8 &log) {
     log.appendFormat("  FboCache             %8d / %8d\n",
             fboCache.getSize(), fboCache.getMaxSize());
 
-    uint32_t total = 0;
     total += textureCache.getSize();
-    total += layerCache.getSize();
     total += renderBufferCache.getSize();
     total += gradientCache.getSize();
     total += pathCache.getSize();
+    total += tessellationCache.getSize();
     total += dropShadowCache.getSize();
     total += patchCache.getSize();
     for (uint32_t i = 0; i < fontRenderer->getFontRendererCount(); i++) {
@@ -309,40 +335,6 @@ void Caches::clearGarbage() {
     textureCache.clearGarbage();
     pathCache.clearGarbage();
     patchCache.clearGarbage();
-
-    Vector<DisplayList*> displayLists;
-    Vector<Layer*> layers;
-
-    { // scope for the lock
-        Mutex::Autolock _l(mGarbageLock);
-        displayLists = mDisplayListGarbage;
-        layers = mLayerGarbage;
-        mDisplayListGarbage.clear();
-        mLayerGarbage.clear();
-    }
-
-    size_t count = displayLists.size();
-    for (size_t i = 0; i < count; i++) {
-        DisplayList* displayList = displayLists.itemAt(i);
-        delete displayList;
-    }
-
-    count = layers.size();
-    for (size_t i = 0; i < count; i++) {
-        Layer* layer = layers.itemAt(i);
-        delete layer;
-    }
-    layers.clear();
-}
-
-void Caches::deleteLayerDeferred(Layer* layer) {
-    Mutex::Autolock _l(mGarbageLock);
-    mLayerGarbage.push(layer);
-}
-
-void Caches::deleteDisplayListDeferred(DisplayList* displayList) {
-    Mutex::Autolock _l(mGarbageLock);
-    mDisplayListGarbage.push(displayList);
 }
 
 void Caches::flush(FlushMode mode) {
@@ -367,6 +359,7 @@ void Caches::flush(FlushMode mode) {
             fontRenderer->flush();
             textureCache.flush();
             pathCache.clear();
+            tessellationCache.clear();
             // fall through
         case kFlushMode_Layers:
             layerCache.clear();
@@ -375,6 +368,13 @@ void Caches::flush(FlushMode mode) {
     }
 
     clearGarbage();
+    glFinish();
+
+    // glFinish() need dequeue buffer, and it is not 100% success
+    // It generates gl error sometimes, this error will be there
+    // until glGetError called. Call GLUtils::dumpGLErrors to clean
+    // the error in case it leaks to other functions
+    GLUtils::dumpGLErrors();
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -403,7 +403,7 @@ bool Caches::unbindMeshBuffer() {
     return false;
 }
 
-bool Caches::bindIndicesBuffer(const GLuint buffer) {
+bool Caches::bindIndicesBufferInternal(const GLuint buffer) {
     if (mCurrentIndicesBuffer != buffer) {
         glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, buffer);
         mCurrentIndicesBuffer = buffer;
@@ -412,7 +412,7 @@ bool Caches::bindIndicesBuffer(const GLuint buffer) {
     return false;
 }
 
-bool Caches::bindIndicesBuffer() {
+bool Caches::bindQuadIndicesBuffer() {
     if (!mMeshIndices) {
         uint16_t* regionIndices = new uint16_t[gMaxNumberOfQuads * 6];
         for (uint32_t i = 0; i < gMaxNumberOfQuads; i++) {
@@ -427,7 +427,7 @@ bool Caches::bindIndicesBuffer() {
         }
 
         glGenBuffers(1, &mMeshIndices);
-        bool force = bindIndicesBuffer(mMeshIndices);
+        bool force = bindIndicesBufferInternal(mMeshIndices);
         glBufferData(GL_ELEMENT_ARRAY_BUFFER, gMaxNumberOfQuads * 6 * sizeof(uint16_t),
                 regionIndices, GL_STATIC_DRAW);
 
@@ -435,7 +435,23 @@ bool Caches::bindIndicesBuffer() {
         return force;
     }
 
-    return bindIndicesBuffer(mMeshIndices);
+    return bindIndicesBufferInternal(mMeshIndices);
+}
+
+bool Caches::bindShadowIndicesBuffer() {
+    if (!mShadowStripsIndices) {
+        uint16_t* shadowIndices = new uint16_t[MAX_SHADOW_INDEX_COUNT];
+        ShadowTessellator::generateShadowIndices(shadowIndices);
+        glGenBuffers(1, &mShadowStripsIndices);
+        bool force = bindIndicesBufferInternal(mShadowStripsIndices);
+        glBufferData(GL_ELEMENT_ARRAY_BUFFER, MAX_SHADOW_INDEX_COUNT * sizeof(uint16_t),
+            shadowIndices, GL_STATIC_DRAW);
+
+        delete[] shadowIndices;
+        return force;
+    }
+
+    return bindIndicesBufferInternal(mShadowStripsIndices);
 }
 
 bool Caches::unbindIndicesBuffer() {
@@ -473,7 +489,7 @@ bool Caches::unbindPixelBuffer() {
 // Meshes and textures
 ///////////////////////////////////////////////////////////////////////////////
 
-void Caches::bindPositionVertexPointer(bool force, GLvoid* vertices, GLsizei stride) {
+void Caches::bindPositionVertexPointer(bool force, const GLvoid* vertices, GLsizei stride) {
     if (force || vertices != mCurrentPositionPointer || stride != mCurrentPositionStride) {
         GLuint slot = currentProgram->position;
         glVertexAttribPointer(slot, 2, GL_FLOAT, GL_FALSE, stride, vertices);
@@ -482,7 +498,7 @@ void Caches::bindPositionVertexPointer(bool force, GLvoid* vertices, GLsizei str
     }
 }
 
-void Caches::bindTexCoordsVertexPointer(bool force, GLvoid* vertices, GLsizei stride) {
+void Caches::bindTexCoordsVertexPointer(bool force, const GLvoid* vertices, GLsizei stride) {
     if (force || vertices != mCurrentTexCoordsPointer || stride != mCurrentTexCoordsStride) {
         GLuint slot = currentProgram->texCoords;
         glVertexAttribPointer(slot, 2, GL_FLOAT, GL_FALSE, stride, vertices);
@@ -534,9 +550,13 @@ void Caches::bindTexture(GLuint texture) {
 }
 
 void Caches::bindTexture(GLenum target, GLuint texture) {
-    if (mBoundTextures[mTextureUnit] != texture) {
+    if (target == GL_TEXTURE_2D) {
+        bindTexture(texture);
+    } else {
+        // GLConsumer directly calls glBindTexture() with
+        // target=GL_TEXTURE_EXTERNAL_OES, don't cache this target
+        // since the cached state could be stale
         glBindTexture(target, texture);
-        mBoundTextures[mTextureUnit] = texture;
     }
 }
 
@@ -679,6 +699,49 @@ TextureVertex* Caches::getRegionMesh() {
     }
 
     return mRegionMesh;
+}
+
+///////////////////////////////////////////////////////////////////////////////
+// Temporary Properties
+///////////////////////////////////////////////////////////////////////////////
+
+void Caches::initTempProperties() {
+    propertyLightDiameter = -1.0f;
+    propertyLightPosY = -1.0f;
+    propertyLightPosZ = -1.0f;
+    propertyAmbientRatio = -1.0f;
+    propertyAmbientShadowStrength = -1;
+    propertySpotShadowStrength = -1;
+}
+
+void Caches::setTempProperty(const char* name, const char* value) {
+    ALOGD("setting property %s to %s", name, value);
+    if (!strcmp(name, "ambientRatio")) {
+        propertyAmbientRatio = fmin(fmax(atof(value), 0.0), 10.0);
+        ALOGD("ambientRatio = %.2f", propertyAmbientRatio);
+        return;
+    } else if (!strcmp(name, "lightDiameter")) {
+        propertyLightDiameter = fmin(fmax(atof(value), 0.0), 3000.0);
+        ALOGD("lightDiameter = %.2f", propertyLightDiameter);
+        return;
+    } else if (!strcmp(name, "lightPosY")) {
+        propertyLightPosY = fmin(fmax(atof(value), 0.0), 3000.0);
+        ALOGD("lightPos Y = %.2f", propertyLightPosY);
+        return;
+    } else if (!strcmp(name, "lightPosZ")) {
+        propertyLightPosZ = fmin(fmax(atof(value), 0.0), 3000.0);
+        ALOGD("lightPos Z = %.2f", propertyLightPosZ);
+        return;
+    } else if (!strcmp(name, "ambientShadowStrength")) {
+        propertyAmbientShadowStrength = atoi(value);
+        ALOGD("ambient shadow strength = 0x%x out of 0xff", propertyAmbientShadowStrength);
+        return;
+    } else if (!strcmp(name, "spotShadowStrength")) {
+        propertySpotShadowStrength = atoi(value);
+        ALOGD("spot shadow strength = 0x%x out of 0xff", propertySpotShadowStrength);
+        return;
+    }
+    ALOGD("    failed");
 }
 
 }; // namespace uirenderer

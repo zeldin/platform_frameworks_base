@@ -106,7 +106,7 @@ public:
         friend class AssetAtlas;
     };
 
-    AssetAtlas(): mTexture(NULL), mImage(NULL), mGenerationId(0),
+    AssetAtlas(): mTexture(NULL), mImage(NULL),
             mBlendKey(true), mOpaqueKey(false) { }
     ~AssetAtlas() { terminate(); }
 
@@ -130,7 +130,7 @@ public:
      * After calling this method, the width, height
      * and texture are set to 0.
      */
-    ANDROID_API void terminate();
+    void terminate();
 
     /**
      * Returns the width of this atlas in pixels.
@@ -160,33 +160,25 @@ public:
      * Returns the entry in the atlas associated with the specified
      * bitmap. If the bitmap is not in the atlas, return NULL.
      */
-    Entry* getEntry(SkBitmap* const bitmap) const;
+    Entry* getEntry(const SkBitmap* bitmap) const;
 
     /**
      * Returns the texture for the atlas entry associated with the
      * specified bitmap. If the bitmap is not in the atlas, return NULL.
      */
-    Texture* getEntryTexture(SkBitmap* const bitmap) const;
-
-    /**
-     * Returns the current generation id of the atlas.
-     */
-    uint32_t getGenerationId() const {
-        return mGenerationId;
-    }
+    Texture* getEntryTexture(const SkBitmap* bitmap) const;
 
 private:
     void createEntries(Caches& caches, int64_t* map, int count);
+    void updateTextureId();
 
     Texture* mTexture;
     Image* mImage;
 
-    uint32_t mGenerationId;
-
     const bool mBlendKey;
     const bool mOpaqueKey;
 
-    KeyedVector<SkBitmap*, Entry*> mEntries;
+    KeyedVector<const SkBitmap*, Entry*> mEntries;
 }; // class AssetAtlas
 
 }; // namespace uirenderer

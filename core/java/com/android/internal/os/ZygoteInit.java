@@ -16,6 +16,7 @@
 
 package com.android.internal.os;
 
+import static android.system.OsConstants.POLLIN;
 import static android.system.OsConstants.S_IRWXG;
 import static android.system.OsConstants.S_IRWXO;
 
@@ -32,15 +33,22 @@ import android.os.Trace;
 import android.system.ErrnoException;
 import android.system.Os;
 import android.system.OsConstants;
+import android.system.StructPollfd;
 import android.util.EventLog;
 import android.util.Log;
+import android.util.Slog;
+import android.webkit.WebViewFactory;
 
+import dalvik.system.DexFile;
+import dalvik.system.PathClassLoader;
 import dalvik.system.VMRuntime;
 
 import libcore.io.IoUtils;
 
 import java.io.BufferedReader;
 import java.io.FileDescriptor;
+import java.io.FileInputStream;
+import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
@@ -87,60 +95,12 @@ public class ZygoteInit {
     private static Resources mResources;
 
     /**
-     * The name of a resource file that contains classes to preload.
+     * The path of a file that contains classes to preload.
      */
-    private static final String PRELOADED_CLASSES = "preloaded-classes";
+    private static final String PRELOADED_CLASSES = "/system/etc/preloaded-classes";
 
     /** Controls whether we should preload resources during zygote init. */
     private static final boolean PRELOAD_RESOURCES = true;
-
-    /**
-     * Invokes a static "main(argv[]) method on class "className".
-     * Converts various failing exceptions into RuntimeExceptions, with
-     * the assumption that they will then cause the VM instance to exit.
-     *
-     * @param loader class loader to use
-     * @param className Fully-qualified class name
-     * @param argv Argument vector for main()
-     */
-    static void invokeStaticMain(ClassLoader loader,
-            String className, String[] argv)
-            throws ZygoteInit.MethodAndArgsCaller {
-        Class<?> cl;
-
-        try {
-            cl = loader.loadClass(className);
-        } catch (ClassNotFoundException ex) {
-            throw new RuntimeException(
-                    "Missing class when invoking static main " + className,
-                    ex);
-        }
-
-        Method m;
-        try {
-            m = cl.getMethod("main", new Class[] { String[].class });
-        } catch (NoSuchMethodException ex) {
-            throw new RuntimeException(
-                    "Missing static main on " + className, ex);
-        } catch (SecurityException ex) {
-            throw new RuntimeException(
-                    "Problem getting static main on " + className, ex);
-        }
-
-        int modifiers = m.getModifiers();
-        if (! (Modifier.isStatic(modifiers) && Modifier.isPublic(modifiers))) {
-            throw new RuntimeException(
-                    "Main method is not public and static on " + className);
-        }
-
-        /*
-         * This throw gets caught in ZygoteInit.main(), which responds
-         * by invoking the exception's run() method. This arrangement
-         * clears up all the stack frames that were required in setting
-         * up the process.
-         */
-        throw new ZygoteInit.MethodAndArgsCaller(m, argv);
-    }
 
     /**
      * Registers a server socket for zygote command connections
@@ -159,8 +119,9 @@ public class ZygoteInit {
             }
 
             try {
-                sServerSocket = new LocalServerSocket(
-                        createFileDescriptor(fileDesc));
+                FileDescriptor fd = new FileDescriptor();
+                fd.setInt$(fileDesc);
+                sServerSocket = new LocalServerSocket(fd);
             } catch (IOException ex) {
                 throw new RuntimeException(
                         "Error binding to local socket '" + fileDesc + "'", ex);
@@ -219,32 +180,23 @@ public class ZygoteInit {
     private static final int ROOT_UID = 0;
     private static final int ROOT_GID = 0;
 
-    /**
-     * Sets effective user ID.
-     */
-    private static void setEffectiveUser(int uid) {
-        int errno = setreuid(ROOT_UID, uid);
-        if (errno != 0) {
-            Log.e(TAG, "setreuid() failed. errno: " + errno);
-        }
-    }
-
-    /**
-     * Sets effective group ID.
-     */
-    private static void setEffectiveGroup(int gid) {
-        int errno = setregid(ROOT_GID, gid);
-        if (errno != 0) {
-            Log.e(TAG, "setregid() failed. errno: " + errno);
-        }
-    }
-
     static void preload() {
         Log.d(TAG, "begin preload");
         preloadClasses();
         preloadResources();
         preloadOpenGL();
+        preloadSharedLibraries();
+        // Ask the WebViewFactory to do any initialization that must run in the zygote process,
+        // for memory sharing purposes.
+        WebViewFactory.prepareWebViewInZygote();
         Log.d(TAG, "end preload");
+    }
+
+    private static void preloadSharedLibraries() {
+        Log.i(TAG, "Preloading shared libraries...");
+        System.loadLibrary("android");
+        System.loadLibrary("compiler_rt");
+        System.loadLibrary("jnigraphics");
     }
 
     private static void preloadOpenGL() {
@@ -263,73 +215,101 @@ public class ZygoteInit {
     private static void preloadClasses() {
         final VMRuntime runtime = VMRuntime.getRuntime();
 
-        InputStream is = ClassLoader.getSystemClassLoader().getResourceAsStream(
-                PRELOADED_CLASSES);
-        if (is == null) {
+        InputStream is;
+        try {
+            is = new FileInputStream(PRELOADED_CLASSES);
+        } catch (FileNotFoundException e) {
             Log.e(TAG, "Couldn't find " + PRELOADED_CLASSES + ".");
-        } else {
-            Log.i(TAG, "Preloading classes...");
-            long startTime = SystemClock.uptimeMillis();
+            return;
+        }
 
-            // Drop root perms while running static initializers.
-            setEffectiveGroup(UNPRIVILEGED_GID);
-            setEffectiveUser(UNPRIVILEGED_UID);
+        Log.i(TAG, "Preloading classes...");
+        long startTime = SystemClock.uptimeMillis();
 
-            // Alter the target heap utilization.  With explicit GCs this
-            // is not likely to have any effect.
-            float defaultUtilization = runtime.getTargetHeapUtilization();
-            runtime.setTargetHeapUtilization(0.8f);
+        // Drop root perms while running static initializers.
+        final int reuid = Os.getuid();
+        final int regid = Os.getgid();
 
+        // We need to drop root perms only if we're already root. In the case of "wrapped"
+        // processes (see WrapperInit), this function is called from an unprivileged uid
+        // and gid.
+        boolean droppedPriviliges = false;
+        if (reuid == ROOT_UID && regid == ROOT_GID) {
             try {
-                BufferedReader br
-                    = new BufferedReader(new InputStreamReader(is), 256);
+                Os.setregid(ROOT_GID, UNPRIVILEGED_GID);
+                Os.setreuid(ROOT_UID, UNPRIVILEGED_UID);
+            } catch (ErrnoException ex) {
+                throw new RuntimeException("Failed to drop root", ex);
+            }
 
-                int count = 0;
-                String line;
-                while ((line = br.readLine()) != null) {
-                    // Skip comments and blank lines.
-                    line = line.trim();
-                    if (line.startsWith("#") || line.equals("")) {
-                        continue;
-                    }
+            droppedPriviliges = true;
+        }
 
-                    try {
-                        if (false) {
-                            Log.v(TAG, "Preloading " + line + "...");
-                        }
-                        Class.forName(line);
-                        count++;
-                    } catch (ClassNotFoundException e) {
-                        Log.w(TAG, "Class not found for preloading: " + line);
-                    } catch (UnsatisfiedLinkError e) {
-                        Log.w(TAG, "Problem preloading " + line + ": " + e);
-                    } catch (Throwable t) {
-                        Log.e(TAG, "Error preloading " + line + ".", t);
-                        if (t instanceof Error) {
-                            throw (Error) t;
-                        }
-                        if (t instanceof RuntimeException) {
-                            throw (RuntimeException) t;
-                        }
-                        throw new RuntimeException(t);
-                    }
+        // Alter the target heap utilization.  With explicit GCs this
+        // is not likely to have any effect.
+        float defaultUtilization = runtime.getTargetHeapUtilization();
+        runtime.setTargetHeapUtilization(0.8f);
+
+        try {
+            BufferedReader br
+                = new BufferedReader(new InputStreamReader(is), 256);
+
+            int count = 0;
+            String line;
+            while ((line = br.readLine()) != null) {
+                // Skip comments and blank lines.
+                line = line.trim();
+                if (line.startsWith("#") || line.equals("")) {
+                    continue;
                 }
 
-                Log.i(TAG, "...preloaded " + count + " classes in "
-                        + (SystemClock.uptimeMillis()-startTime) + "ms.");
-            } catch (IOException e) {
-                Log.e(TAG, "Error reading " + PRELOADED_CLASSES + ".", e);
-            } finally {
-                IoUtils.closeQuietly(is);
-                // Restore default.
-                runtime.setTargetHeapUtilization(defaultUtilization);
+                try {
+                    if (false) {
+                        Log.v(TAG, "Preloading " + line + "...");
+                    }
+                    // Load and explicitly initialize the given class. Use
+                    // Class.forName(String, boolean, ClassLoader) to avoid repeated stack lookups
+                    // (to derive the caller's class-loader). Use true to force initialization, and
+                    // null for the boot classpath class-loader (could as well cache the
+                    // class-loader of this class in a variable).
+                    Class.forName(line, true, null);
+                    count++;
+                } catch (ClassNotFoundException e) {
+                    Log.w(TAG, "Class not found for preloading: " + line);
+                } catch (UnsatisfiedLinkError e) {
+                    Log.w(TAG, "Problem preloading " + line + ": " + e);
+                } catch (Throwable t) {
+                    Log.e(TAG, "Error preloading " + line + ".", t);
+                    if (t instanceof Error) {
+                        throw (Error) t;
+                    }
+                    if (t instanceof RuntimeException) {
+                        throw (RuntimeException) t;
+                    }
+                    throw new RuntimeException(t);
+                }
+            }
 
-                // Fill in dex caches with classes, fields, and methods brought in by preloading.
-                runtime.preloadDexCaches();
+            Log.i(TAG, "...preloaded " + count + " classes in "
+                    + (SystemClock.uptimeMillis()-startTime) + "ms.");
+        } catch (IOException e) {
+            Log.e(TAG, "Error reading " + PRELOADED_CLASSES + ".", e);
+        } finally {
+            IoUtils.closeQuietly(is);
+            // Restore default.
+            runtime.setTargetHeapUtilization(defaultUtilization);
 
-                // Bring back root. We'll need it later.
-                setEffectiveUser(ROOT_UID);
-                setEffectiveGroup(ROOT_GID);
+            // Fill in dex caches with classes, fields, and methods brought in by preloading.
+            runtime.preloadDexCaches();
+
+            // Bring back root. We'll need it later if we're in the zygote.
+            if (droppedPriviliges) {
+                try {
+                    Os.setreuid(ROOT_UID, ROOT_UID);
+                    Os.setregid(ROOT_GID, ROOT_GID);
+                } catch (ErrnoException ex) {
+                    throw new RuntimeException("Failed to restore root", ex);
+                }
             }
         }
     }
@@ -400,7 +380,7 @@ public class ZygoteInit {
                 Log.v(TAG, "Preloading resource #" + Integer.toHexString(id));
             }
             if (id != 0) {
-                if (mResources.getDrawable(id) == null) {
+                if (mResources.getDrawable(id, null) == null) {
                     throw new IllegalArgumentException(
                             "Unable to find preloaded drawable resource #0x"
                             + Integer.toHexString(id)
@@ -443,18 +423,65 @@ public class ZygoteInit {
             Process.setArgV0(parsedArgs.niceName);
         }
 
+        final String systemServerClasspath = Os.getenv("SYSTEMSERVERCLASSPATH");
+        if (systemServerClasspath != null) {
+            performSystemServerDexOpt(systemServerClasspath);
+        }
+
         if (parsedArgs.invokeWith != null) {
+            String[] args = parsedArgs.remainingArgs;
+            // If we have a non-null system server class path, we'll have to duplicate the
+            // existing arguments and append the classpath to it. ART will handle the classpath
+            // correctly when we exec a new process.
+            if (systemServerClasspath != null) {
+                String[] amendedArgs = new String[args.length + 2];
+                amendedArgs[0] = "-cp";
+                amendedArgs[1] = systemServerClasspath;
+                System.arraycopy(parsedArgs.remainingArgs, 0, amendedArgs, 2, parsedArgs.remainingArgs.length);
+            }
+
             WrapperInit.execApplication(parsedArgs.invokeWith,
                     parsedArgs.niceName, parsedArgs.targetSdkVersion,
-                    null, parsedArgs.remainingArgs);
+                    VMRuntime.getCurrentInstructionSet(), null, args);
         } else {
+            ClassLoader cl = null;
+            if (systemServerClasspath != null) {
+                cl = new PathClassLoader(systemServerClasspath, ClassLoader.getSystemClassLoader());
+                Thread.currentThread().setContextClassLoader(cl);
+            }
+
             /*
              * Pass the remaining arguments to SystemServer.
              */
-            RuntimeInit.zygoteInit(parsedArgs.targetSdkVersion, parsedArgs.remainingArgs);
+            RuntimeInit.zygoteInit(parsedArgs.targetSdkVersion, parsedArgs.remainingArgs, cl);
         }
 
         /* should never reach here */
+    }
+
+    /**
+     * Performs dex-opt on the elements of {@code classPath}, if needed. We
+     * choose the instruction set of the current runtime.
+     */
+    private static void performSystemServerDexOpt(String classPath) {
+        final String[] classPathElements = classPath.split(":");
+        final InstallerConnection installer = new InstallerConnection();
+        final String instructionSet = VMRuntime.getRuntime().vmInstructionSet();
+
+        try {
+            for (String classPathElement : classPathElements) {
+                final int dexoptNeeded = DexFile.getDexOptNeeded(
+                        classPathElement, "*", instructionSet, false /* defer */);
+                if (dexoptNeeded != DexFile.NO_DEXOPT_NEEDED) {
+                    installer.dexopt(classPathElement, Process.SYSTEM_UID, false,
+                            instructionSet, dexoptNeeded);
+                }
+            }
+        } catch (IOException ioe) {
+            throw new RuntimeException("Error starting system_server", ioe);
+        } finally {
+            installer.disconnect();
+        }
     }
 
     /**
@@ -481,8 +508,8 @@ public class ZygoteInit {
             "--setgid=1000",
             "--setgroups=1001,1002,1003,1004,1005,1006,1007,1008,1009,1010,1018,1032,3001,3002,3003,3006,3007",
             "--capabilities=" + capabilities + "," + capabilities,
-            "--runtime-init",
             "--nice-name=system_server",
+            "--runtime-args",
             "com.android.server.SystemServer",
         };
         ZygoteConnection.Arguments parsedArgs = null;
@@ -534,6 +561,7 @@ public class ZygoteInit {
 
     public static void main(String argv[]) {
         try {
+            RuntimeInit.enableDdms();
             // Start profiling the zygote initialization.
             SamplingProfilerIntegration.start();
 
@@ -631,117 +659,40 @@ public class ZygoteInit {
     private static void runSelectLoop(String abiList) throws MethodAndArgsCaller {
         ArrayList<FileDescriptor> fds = new ArrayList<FileDescriptor>();
         ArrayList<ZygoteConnection> peers = new ArrayList<ZygoteConnection>();
-        FileDescriptor[] fdArray = new FileDescriptor[4];
 
         fds.add(sServerSocket.getFileDescriptor());
         peers.add(null);
 
         while (true) {
-            int index;
-
-            try {
-                fdArray = fds.toArray(fdArray);
-                index = selectReadable(fdArray);
-            } catch (IOException ex) {
-                throw new RuntimeException("Error in select()", ex);
+            StructPollfd[] pollFds = new StructPollfd[fds.size()];
+            for (int i = 0; i < pollFds.length; ++i) {
+                pollFds[i] = new StructPollfd();
+                pollFds[i].fd = fds.get(i);
+                pollFds[i].events = (short) POLLIN;
             }
-
-            if (index < 0) {
-                throw new RuntimeException("Error in select()");
-            } else if (index == 0) {
-                ZygoteConnection newPeer = acceptCommandPeer(abiList);
-                peers.add(newPeer);
-                fds.add(newPeer.getFileDesciptor());
-            } else {
-                boolean done;
-                done = peers.get(index).runOnce();
-
-                if (done) {
-                    peers.remove(index);
-                    fds.remove(index);
+            try {
+                Os.poll(pollFds, -1);
+            } catch (ErrnoException ex) {
+                throw new RuntimeException("poll failed", ex);
+            }
+            for (int i = pollFds.length - 1; i >= 0; --i) {
+                if ((pollFds[i].revents & POLLIN) == 0) {
+                    continue;
+                }
+                if (i == 0) {
+                    ZygoteConnection newPeer = acceptCommandPeer(abiList);
+                    peers.add(newPeer);
+                    fds.add(newPeer.getFileDesciptor());
+                } else {
+                    boolean done = peers.get(i).runOnce();
+                    if (done) {
+                        peers.remove(i);
+                        fds.remove(i);
+                    }
                 }
             }
         }
     }
-
-    /**
-     * The Linux syscall "setreuid()"
-     * @param ruid real uid
-     * @param euid effective uid
-     * @return 0 on success, non-zero errno on fail
-     */
-    static native int setreuid(int ruid, int euid);
-
-    /**
-     * The Linux syscall "setregid()"
-     * @param rgid real gid
-     * @param egid effective gid
-     * @return 0 on success, non-zero errno on fail
-     */
-    static native int setregid(int rgid, int egid);
-
-    /**
-     * Invokes the linux syscall "setpgid"
-     *
-     * @param pid pid to change
-     * @param pgid new process group of pid
-     * @return 0 on success or non-zero errno on fail
-     */
-    static native int setpgid(int pid, int pgid);
-
-    /**
-     * Invokes the linux syscall "getpgid"
-     *
-     * @param pid pid to query
-     * @return pgid of pid in question
-     * @throws IOException on error
-     */
-    static native int getpgid(int pid) throws IOException;
-
-    /**
-     * Invokes the syscall dup2() to copy the specified descriptors into
-     * stdin, stdout, and stderr. The existing stdio descriptors will be
-     * closed and errors during close will be ignored. The specified
-     * descriptors will also remain open at their original descriptor numbers,
-     * so the caller may want to close the original descriptors.
-     *
-     * @param in new stdin
-     * @param out new stdout
-     * @param err new stderr
-     * @throws IOException
-     */
-    static native void reopenStdio(FileDescriptor in,
-            FileDescriptor out, FileDescriptor err) throws IOException;
-
-    /**
-     * Toggles the close-on-exec flag for the specified file descriptor.
-     *
-     * @param fd non-null; file descriptor
-     * @param flag desired close-on-exec flag state
-     * @throws IOException
-     */
-    static native void setCloseOnExec(FileDescriptor fd, boolean flag)
-            throws IOException;
-
-    /**
-     * Invokes select() on the provider array of file descriptors (selecting
-     * for readability only). Array elements of null are ignored.
-     *
-     * @param fds non-null; array of readable file descriptors
-     * @return index of descriptor that is now readable or -1 for empty array.
-     * @throws IOException if an error occurs
-     */
-    static native int selectReadable(FileDescriptor[] fds) throws IOException;
-
-    /**
-     * Creates a file descriptor from an int fd.
-     *
-     * @param fd integer OS file descriptor
-     * @return non-null; FileDescriptor instance
-     * @throws IOException if fd is invalid
-     */
-    static native FileDescriptor createFileDescriptor(int fd)
-            throws IOException;
 
     /**
      * Class not instantiable.

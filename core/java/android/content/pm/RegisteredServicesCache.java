@@ -35,6 +35,7 @@ import android.util.SparseArray;
 import android.util.Xml;
 
 import com.android.internal.annotations.GuardedBy;
+import com.android.internal.util.ArrayUtils;
 import com.android.internal.util.FastXmlSerializer;
 import com.google.android.collect.Lists;
 import com.google.android.collect.Maps;
@@ -49,6 +50,7 @@ import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.PrintWriter;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
@@ -140,12 +142,43 @@ public abstract class RegisteredServicesCache<V> {
         mContext.registerReceiver(mExternalReceiver, sdFilter);
     }
 
+    private final void handlePackageEvent(Intent intent, int userId) {
+        // Don't regenerate the services map when the package is removed or its
+        // ASEC container unmounted as a step in replacement.  The subsequent
+        // _ADDED / _AVAILABLE call will regenerate the map in the final state.
+        final String action = intent.getAction();
+        // it's a new-component action if it isn't some sort of removal
+        final boolean isRemoval = Intent.ACTION_PACKAGE_REMOVED.equals(action)
+                || Intent.ACTION_EXTERNAL_APPLICATIONS_UNAVAILABLE.equals(action);
+        // if it's a removal, is it part of an update-in-place step?
+        final boolean replacing = intent.getBooleanExtra(Intent.EXTRA_REPLACING, false);
+
+        if (isRemoval && replacing) {
+            // package is going away, but it's the middle of an upgrade: keep the current
+            // state and do nothing here.  This clause is intentionally empty.
+        } else {
+            int[] uids = null;
+            // either we're adding/changing, or it's a removal without replacement, so
+            // we need to update the set of available services
+            if (Intent.ACTION_EXTERNAL_APPLICATIONS_AVAILABLE.equals(action)
+                    || Intent.ACTION_EXTERNAL_APPLICATIONS_UNAVAILABLE.equals(action)) {
+                uids = intent.getIntArrayExtra(Intent.EXTRA_CHANGED_UID_LIST);
+            } else {
+                int uid = intent.getIntExtra(Intent.EXTRA_UID, -1);
+                if (uid > 0) {
+                    uids = new int[] { uid };
+                }
+            }
+            generateServicesMap(uids, userId);
+        }
+    }
+
     private final BroadcastReceiver mPackageReceiver = new BroadcastReceiver() {
         @Override
         public void onReceive(Context context, Intent intent) {
             final int uid = intent.getIntExtra(Intent.EXTRA_UID, -1);
             if (uid != -1) {
-                generateServicesMap(UserHandle.getUserId(uid));
+                handlePackageEvent(intent, UserHandle.getUserId(uid));
             }
         }
     };
@@ -154,7 +187,7 @@ public abstract class RegisteredServicesCache<V> {
         @Override
         public void onReceive(Context context, Intent intent) {
             // External apps can't coexist with multi-user, so scan owner
-            generateServicesMap(UserHandle.USER_OWNER);
+            handlePackageEvent(intent, UserHandle.USER_OWNER);
         }
     };
 
@@ -249,7 +282,7 @@ public abstract class RegisteredServicesCache<V> {
             // Find user and lazily populate cache
             final UserServices<V> user = findOrCreateUserLocked(userId);
             if (user.services == null) {
-                generateServicesMap(userId);
+                generateServicesMap(null, userId);
             }
             return user.services.get(type);
         }
@@ -264,7 +297,7 @@ public abstract class RegisteredServicesCache<V> {
             // Find user and lazily populate cache
             final UserServices<V> user = findOrCreateUserLocked(userId);
             if (user.services == null) {
-                generateServicesMap(userId);
+                generateServicesMap(null, userId);
             }
             return Collections.unmodifiableCollection(
                     new ArrayList<ServiceInfo<V>>(user.services.values()));
@@ -290,10 +323,13 @@ public abstract class RegisteredServicesCache<V> {
     /**
      * Populate {@link UserServices#services} by scanning installed packages for
      * given {@link UserHandle}.
+     * @param changedUids the array of uids that have been affected, as mentioned in the broadcast
+     *                    or null to assume that everything is affected.
+     * @param userId the user for whom to update the services map.
      */
-    private void generateServicesMap(int userId) {
+    private void generateServicesMap(int[] changedUids, int userId) {
         if (DEBUG) {
-            Slog.d(TAG, "generateServicesMap() for " + userId);
+            Slog.d(TAG, "generateServicesMap() for " + userId + ", changed UIDs = " + changedUids);
         }
 
         final PackageManager pm = mContext.getPackageManager();
@@ -320,8 +356,6 @@ public abstract class RegisteredServicesCache<V> {
             final boolean firstScan = user.services == null;
             if (firstScan) {
                 user.services = Maps.newHashMap();
-            } else {
-                user.services.clear();
             }
 
             StringBuilder changes = new StringBuilder();
@@ -378,7 +412,10 @@ public abstract class RegisteredServicesCache<V> {
 
             ArrayList<V> toBeRemoved = Lists.newArrayList();
             for (V v1 : user.persistentServices.keySet()) {
-                if (!containsType(serviceInfos, v1)) {
+                // Remove a persisted service that's not in the currently available services list.
+                // And only if it is in the list of changedUids.
+                if (!containsType(serviceInfos, v1)
+                        && containsUid(changedUids, user.persistentServices.get(v1))) {
                     toBeRemoved.add(v1);
                 }
             }
@@ -388,7 +425,18 @@ public abstract class RegisteredServicesCache<V> {
                 }
                 changed = true;
                 user.persistentServices.remove(v1);
+                user.services.remove(v1);
                 notifyListener(v1, userId, true /* removed */);
+            }
+            if (DEBUG) {
+                Log.d(TAG, "user.services=");
+                for (V v : user.services.keySet()) {
+                    Log.d(TAG, "  " + v + " " + user.services.get(v));
+                }
+                Log.d(TAG, "user.persistentServices=");
+                for (V v : user.persistentServices.keySet()) {
+                    Log.d(TAG, "  " + v + " " + user.persistentServices.get(v));
+                }
             }
             if (DEBUG) {
                 if (changes.length() > 0) {
@@ -403,6 +451,14 @@ public abstract class RegisteredServicesCache<V> {
                 writePersistentServicesLocked();
             }
         }
+    }
+
+    /**
+     * Returns true if the list of changed uids is null (wildcard) or the specified uid
+     * is contained in the list of changed uids.
+     */
+    private boolean containsUid(int[] changedUids, int uid) {
+        return changedUids == null || ArrayUtils.contains(changedUids, uid);
     }
 
     private boolean containsType(ArrayList<ServiceInfo<V>> serviceInfos, V type) {
@@ -486,7 +542,7 @@ public abstract class RegisteredServicesCache<V> {
             }
             fis = mPersistentServicesFile.openRead();
             XmlPullParser parser = Xml.newPullParser();
-            parser.setInput(fis, null);
+            parser.setInput(fis, StandardCharsets.UTF_8.name());
             int eventType = parser.getEventType();
             while (eventType != XmlPullParser.START_TAG
                     && eventType != XmlPullParser.END_DOCUMENT) {
@@ -536,7 +592,7 @@ public abstract class RegisteredServicesCache<V> {
         try {
             fos = mPersistentServicesFile.startWrite();
             XmlSerializer out = new FastXmlSerializer();
-            out.setOutput(fos, "utf-8");
+            out.setOutput(fos, StandardCharsets.UTF_8.name());
             out.startDocument(null, true);
             out.setFeature("http://xmlpull.org/v1/doc/features.html#indent-output", true);
             out.startTag(null, "services");

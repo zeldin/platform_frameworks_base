@@ -20,7 +20,7 @@
 
 #include "jni.h"
 #include "JNIHelp.h"
-#include "android_runtime/AndroidRuntime.h"
+#include "core_jni_helpers.h"
 
 #include <usbhost/usbhost.h>
 
@@ -123,20 +123,45 @@ android_hardware_UsbDeviceConnection_claim_interface(JNIEnv *env, jobject thiz,
     return (ret == 0) ? JNI_TRUE : JNI_FALSE;
 }
 
-static jint
+static jboolean
 android_hardware_UsbDeviceConnection_release_interface(JNIEnv *env, jobject thiz, jint interfaceID)
 {
     struct usb_device* device = get_device_from_object(env, thiz);
     if (!device) {
         ALOGE("device is closed in native_release_interface");
-        return -1;
+        return JNI_FALSE;
     }
     int ret = usb_device_release_interface(device, interfaceID);
     if (ret == 0) {
         // allow kernel to reconnect its driver
         usb_device_connect_kernel_driver(device, interfaceID, true);
     }
-    return ret;
+    return (ret == 0) ? JNI_TRUE : JNI_FALSE;
+}
+
+static jboolean
+android_hardware_UsbDeviceConnection_set_interface(JNIEnv *env, jobject thiz, jint interfaceID,
+        jint alternateSetting)
+{
+    struct usb_device* device = get_device_from_object(env, thiz);
+    if (!device) {
+        ALOGE("device is closed in native_set_interface");
+        return JNI_FALSE;
+    }
+    int ret = usb_device_set_interface(device, interfaceID, alternateSetting);
+    return (ret == 0) ? JNI_TRUE : JNI_FALSE;
+}
+
+static jboolean
+android_hardware_UsbDeviceConnection_set_configuration(JNIEnv *env, jobject thiz, jint configurationID)
+{
+    struct usb_device* device = get_device_from_object(env, thiz);
+    if (!device) {
+        ALOGE("device is closed in native_set_configuration");
+        return JNI_FALSE;
+    }
+    int ret = usb_device_set_configuration(device, configurationID);
+    return (ret == 0) ? JNI_TRUE : JNI_FALSE;
 }
 
 static jint
@@ -229,6 +254,8 @@ static JNINativeMethod method_table[] = {
     {"native_get_desc",         "()[B", (void *)android_hardware_UsbDeviceConnection_get_desc},
     {"native_claim_interface",  "(IZ)Z",(void *)android_hardware_UsbDeviceConnection_claim_interface},
     {"native_release_interface","(I)Z", (void *)android_hardware_UsbDeviceConnection_release_interface},
+    {"native_set_interface","(II)Z",    (void *)android_hardware_UsbDeviceConnection_set_interface},
+    {"native_set_configuration","(I)Z", (void *)android_hardware_UsbDeviceConnection_set_configuration},
     {"native_control_request",  "(IIII[BIII)I",
                                         (void *)android_hardware_UsbDeviceConnection_control_request},
     {"native_bulk_request",     "(I[BIII)I",
@@ -241,17 +268,9 @@ static JNINativeMethod method_table[] = {
 
 int register_android_hardware_UsbDeviceConnection(JNIEnv *env)
 {
-    jclass clazz = env->FindClass("android/hardware/usb/UsbDeviceConnection");
-    if (clazz == NULL) {
-        ALOGE("Can't find android/hardware/usb/UsbDeviceConnection");
-        return -1;
-    }
-    field_context = env->GetFieldID(clazz, "mNativeContext", "J");
-    if (field_context == NULL) {
-        ALOGE("Can't find UsbDeviceConnection.mNativeContext");
-        return -1;
-    }
+    jclass clazz = FindClassOrDie(env, "android/hardware/usb/UsbDeviceConnection");
+    field_context = GetFieldIDOrDie(env, clazz, "mNativeContext", "J");
 
-    return AndroidRuntime::registerNativeMethods(env, "android/hardware/usb/UsbDeviceConnection",
+    return RegisterMethodsOrDie(env, "android/hardware/usb/UsbDeviceConnection",
             method_table, NELEM(method_table));
 }

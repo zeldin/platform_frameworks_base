@@ -167,6 +167,7 @@ import android.util.SparseArray;
  */
 public final class MotionEvent extends InputEvent implements Parcelable {
     private static final long NS_PER_MS = 1000000;
+    private static final String LABEL_PREFIX = "AXIS_";
 
     /**
      * An invalid pointer id.
@@ -399,6 +400,23 @@ public final class MotionEvent extends InputEvent implements Parcelable {
      * @see #setTainted
      */
     public static final int FLAG_TAINTED = 0x80000000;
+
+    /**
+     * Private flag indicating that this event was synthesized by the system and
+     * should be delivered to the accessibility focused view first. When being
+     * dispatched such an event is not handled by predecessors of the accessibility
+     * focused view and after the event reaches that view the flag is cleared and
+     * normal event dispatch is performed. This ensures that the platform can click
+     * on any view that has accessibility focus which is semantically equivalent to
+     * asking the view to perform a click accessibility action but more generic as
+     * views not implementing click action correctly can still be activated.
+     *
+     * @hide
+     * @see #isTargetAccessibilityFocus()
+     * @see #setTargetAccessibilityFocus(boolean)
+     */
+    public static final int FLAG_TARGET_ACCESSIBILITY_FOCUS = 0x40000000;
+
 
     /**
      * Flag indicating the motion event intersected the top edge of the screen.
@@ -1369,6 +1387,9 @@ public final class MotionEvent extends InputEvent implements Parcelable {
     private static native long nativeReadFromParcel(long nativePtr, Parcel parcel);
     private static native void nativeWriteToParcel(long nativePtr, Parcel parcel);
 
+    private static native String nativeAxisToString(int axis);
+    private static native int nativeAxisFromString(String label);
+
     private MotionEvent() {
     }
 
@@ -1760,6 +1781,20 @@ public final class MotionEvent extends InputEvent implements Parcelable {
     public final void setTainted(boolean tainted) {
         final int flags = getFlags();
         nativeSetFlags(mNativePtr, tainted ? flags | FLAG_TAINTED : flags & ~FLAG_TAINTED);
+    }
+
+    /** @hide */
+    public final boolean isTargetAccessibilityFocus() {
+        final int flags = getFlags();
+        return (flags & FLAG_TARGET_ACCESSIBILITY_FOCUS) != 0;
+    }
+
+    /** @hide */
+    public final void setTargetAccessibilityFocus(boolean targetsFocus) {
+        final int flags = getFlags();
+        nativeSetFlags(mNativePtr, targetsFocus
+                ? flags | FLAG_TARGET_ACCESSIBILITY_FOCUS
+                : flags & ~FLAG_TARGET_ACCESSIBILITY_FOCUS);
     }
 
     /**
@@ -3051,8 +3086,8 @@ public final class MotionEvent extends InputEvent implements Parcelable {
      * @return The symbolic name of the specified axis.
      */
     public static String axisToString(int axis) {
-        String symbolicName = AXIS_SYMBOLIC_NAMES.get(axis);
-        return symbolicName != null ? symbolicName : Integer.toString(axis);
+        String symbolicName = nativeAxisToString(axis);
+        return symbolicName != null ? LABEL_PREFIX + symbolicName : Integer.toString(axis);
     }
 
     /**
@@ -3064,17 +3099,13 @@ public final class MotionEvent extends InputEvent implements Parcelable {
      * @see KeyEvent#keyCodeToString(int)
      */
     public static int axisFromString(String symbolicName) {
-        if (symbolicName == null) {
-            throw new IllegalArgumentException("symbolicName must not be null");
-        }
-
-        final int count = AXIS_SYMBOLIC_NAMES.size();
-        for (int i = 0; i < count; i++) {
-            if (symbolicName.equals(AXIS_SYMBOLIC_NAMES.valueAt(i))) {
-                return i;
+        if (symbolicName.startsWith(LABEL_PREFIX)) {
+            symbolicName = symbolicName.substring(LABEL_PREFIX.length());
+            int axis = nativeAxisFromString(symbolicName);
+            if (axis >= 0) {
+                return axis;
             }
         }
-
         try {
             return Integer.parseInt(symbolicName, 10);
         } catch (NumberFormatException ex) {
@@ -3131,6 +3162,24 @@ public final class MotionEvent extends InputEvent implements Parcelable {
         return symbolicName != null ? symbolicName : Integer.toString(toolType);
     }
 
+    /**
+     * Checks if a mouse or stylus button (or combination of buttons) is pressed.
+     * @param button Button (or combination of buttons).
+     * @return True if specified buttons are pressed.
+     *
+     * @see #BUTTON_PRIMARY
+     * @see #BUTTON_SECONDARY
+     * @see #BUTTON_TERTIARY
+     * @see #BUTTON_FORWARD
+     * @see #BUTTON_BACK
+     */
+    public final boolean isButtonPressed(int button) {
+        if (button == 0) {
+            return false;
+        }
+        return (getButtonState() & button) == button;
+    }
+
     public static final Parcelable.Creator<MotionEvent> CREATOR
             = new Parcelable.Creator<MotionEvent>() {
         public MotionEvent createFromParcel(Parcel in) {
@@ -3148,6 +3197,12 @@ public final class MotionEvent extends InputEvent implements Parcelable {
         MotionEvent ev = obtain();
         ev.mNativePtr = nativeReadFromParcel(ev.mNativePtr, in);
         return ev;
+    }
+
+    /** @hide */
+    @Override
+    public final void cancel() {
+        setAction(ACTION_CANCEL);
     }
 
     public void writeToParcel(Parcel out, int flags) {
@@ -3372,11 +3427,11 @@ public final class MotionEvent extends InputEvent implements Parcelable {
                         throw new IllegalArgumentException("Axis out of range.");
                     }
                     final long bits = mPackedAxisBits;
-                    final long axisBit = 1L << axis;
+                    final long axisBit = 0x8000000000000000L >>> axis;
                     if ((bits & axisBit) == 0) {
                         return 0;
                     }
-                    final int index = Long.bitCount(bits & (axisBit - 1L));
+                    final int index = Long.bitCount(bits & ~(0xFFFFFFFFFFFFFFFFL >>> axis));
                     return mPackedAxisValues[index];
                 }
             }
@@ -3425,8 +3480,8 @@ public final class MotionEvent extends InputEvent implements Parcelable {
                         throw new IllegalArgumentException("Axis out of range.");
                     }
                     final long bits = mPackedAxisBits;
-                    final long axisBit = 1L << axis;
-                    final int index = Long.bitCount(bits & (axisBit - 1L));
+                    final long axisBit = 0x8000000000000000L >>> axis;
+                    final int index = Long.bitCount(bits & ~(0xFFFFFFFFFFFFFFFFL >>> axis));
                     float[] values = mPackedAxisValues;
                     if ((bits & axisBit) == 0) {
                         if (values == null) {
